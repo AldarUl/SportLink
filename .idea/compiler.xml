@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="reports" />
+        <module name="sports" />
+        <module name="auth" />
+        <module name="admin" />
+        <module name="users" />
+        <module name="sportlink-app" />
+        <module name="common" />
+        <module name="reviews" />
+        <module name="search-feed" />
+        <module name="clubs" />
+        <module name="events" />
+        <module name="notifications" />
+        <module name="applications" />
+      </profile>
+    </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="app" target="1.5" />
+      <module name="auth-service (2)" target="21" />
+      <module name="auth-service (3)" target="21" />
+      <module name="auth-service (4)" target="21" />
+      <module name="auth-service (5)" target="21" />
+      <module name="auth-service (6)" target="21" />
+      <module name="auth-service (7)" target="21" />
+      <module name="auth-service (8)" target="21" />
+    </bytecodeTargetLevel>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="admin" options="-parameters" />
+      <module name="app" options="" />
+      <module name="applications" options="-parameters" />
+      <module name="auth" options="-parameters" />
+      <module name="auth-service (2)" options="-parameters" />
+      <module name="auth-service (3)" options="-parameters" />
+      <module name="auth-service (4)" options="-parameters" />
+      <module name="auth-service (5)" options="-parameters" />
+      <module name="auth-service (6)" options="-parameters" />
+      <module name="auth-service (7)" options="-parameters" />
+      <module name="auth-service (8)" options="-parameters" />
+      <module name="clubs" options="-parameters" />
+      <module name="common" options="-parameters" />
+      <module name="events" options="-parameters" />
+      <module name="notifications" options="-parameters" />
+      <module name="reports" options="-parameters" />
+      <module name="reviews" options="-parameters" />
+      <module name="search-feed" options="-parameters" />
+      <module name="sportlink-app" options="-parameters" />
+      <module name="sports" options="-parameters" />
+      <module name="users" options="-parameters" />
+    </option>
+  </component>
+</project>

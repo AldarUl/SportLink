@@ -1,0 +1,562 @@
+openapi: 3.0.1
+info:
+  title: SportLink — Combined API
+  description: |
+    Единая OpenAPI-спецификация, охватывающая все микросервисы SportLink:
+      • Auth    • User  
+      • Sport   • Event  
+      • Partner-Search • Club  
+      • Reputation • Notification
+  version: 0.1.0
+
+servers:
+  - url: http://localhost                # gateway или reverse-proxy
+
+tags:
+  - name: Auth
+  - name: User
+  - name: Sport
+  - name: Event
+  - name: PartnerSearch
+  - name: Club
+  - name: Reputation
+  - name: Notification
+
+# ────────────────────────────────  PATHS  ────────────────────────────────
+paths:
+
+  # ----------  AUTH ----------
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        "201":
+          description: User created, JWT pair returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        "200":
+          description: Access + refresh tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh expired access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        "200":
+          description: New JWT pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Invalidate refresh token
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Logged out }
+
+  # ----------  USER ----------
+  /users/me:
+    get:
+      tags: [User]
+      summary: Get current user profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+    patch:
+      tags: [User]
+      summary: Update current user profile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserUpdate' }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  /users/{id}:
+    get:
+      tags: [User]
+      summary: Get public profile by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Public profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserPublic' }
+
+  # ----------  SPORT ----------
+  /sports:
+    get:
+      tags: [Sport]
+      summary: List sports
+      responses:
+        "200":
+          description: Sports array
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Sport' }
+    post:
+      tags: [Sport]
+      summary: Create sport (admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SportCreate' }
+      responses:
+        "201":
+          description: Created sport
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sport' }
+
+  /sports/{id}:
+    get:
+      tags: [Sport]
+      summary: Get sport by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Sport details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sport' }
+
+  # ----------  EVENT ----------
+  /events:
+    get:
+      tags: [Event]
+      summary: Search events
+      parameters:
+        - in: query
+          name: sportId
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Events list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Event' }
+
+    post:
+      tags: [Event]
+      summary: Create event
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventCreate' }
+      responses:
+        "201":
+          description: Event created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+
+  /events/{id}:
+    get:
+      tags: [Event]
+      summary: Get event by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Event details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+
+  /events/{id}/join:
+    post:
+      tags: [Event]
+      summary: Join event
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Joined }
+
+  /events/{id}/checkin:
+    post:
+      tags: [Event]
+      summary: Check-in at event
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Checked in }
+
+  # ----------  PARTNER-SEARCH ----------
+  /partners/search:
+    get:
+      tags: [PartnerSearch]
+      summary: Search partners by sport & geo
+      parameters:
+        - in: query
+          name: sportId
+          schema: { type: integer }
+        - in: query
+          name: lat
+          schema: { type: number, format: double }
+        - in: query
+          name: lon
+          schema: { type: number, format: double }
+        - in: query
+          name: radius
+          schema: { type: integer, description: meters }
+        - in: query
+          name: page
+          schema: { type: integer, default: 0 }
+        - in: query
+          name: size
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Matching partners
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SearchResult' }
+
+  # ----------  CLUB ----------
+  /clubs:
+    get:
+      tags: [Club]
+      summary: List clubs
+      responses:
+        "200":
+          description: Clubs array
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Club' }
+
+    post:
+      tags: [Club]
+      summary: Create club
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClubCreate' }
+      responses:
+        "201":
+          description: Club created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Club' }
+
+  /clubs/{id}:
+    get:
+      tags: [Club]
+      summary: Get club by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Club details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Club' }
+
+  /clubs/{id}/join:
+    post:
+      tags: [Club]
+      summary: Request to join club
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "202": { description: Join request sent }
+
+  # ----------  REPUTATION ----------
+  /users/{id}/reputation:
+    get:
+      tags: [Reputation]
+      summary: Get user reputation stats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Reputation info
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reputation' }
+
+  /users/{id}/reviews:
+    post:
+      tags: [Reputation]
+      summary: Leave review for user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewCreate' }
+      responses:
+        "201":
+          description: Review created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+
+  # ----------  NOTIFICATION ----------
+  /notifications:
+    get:
+      tags: [Notification]
+      summary: Get current user notifications
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/{id}/read:
+    patch:
+      tags: [Notification]
+      summary: Mark notification as read
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204": { description: Marked as read }
+
+# ───────────────────────────────  COMPONENTS  ───────────────────────────────
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    # --- Auth ---
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password }
+        fullName: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:    { type: string, format: email }
+        password: { type: string, format: password }
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+    TokenResponse:
+      type: object
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+
+    # --- User ---
+    User:
+      type: object
+      properties:
+        id:        { type: integer }
+        email:     { type: string, format: email }
+        fullName:  { type: string }
+        birthDate: { type: string, format: date }
+        bio:       { type: string }
+    UserPublic:
+      type: object
+      properties:
+        id:        { type: integer }
+        fullName:  { type: string }
+        avatarUrl: { type: string, format: uri }
+    UserUpdate:
+      type: object
+      properties:
+        fullName:  { type: string }
+        bio:       { type: string }
+        avatarUrl: { type: string, format: uri }
+
+    # --- Sport ---
+    Sport:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        description: { type: string }
+    SportCreate:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        description: { type: string }
+
+    # --- Event ---
+    Event:
+      type: object
+      properties:
+        id:          { type: integer }
+        sportId:     { type: integer }
+        organizerId: { type: integer }
+        title:       { type: string }
+        description: { type: string }
+        startTime:   { type: string, format: date-time }
+        endTime:     { type: string, format: date-time }
+        location:    { type: string }
+    EventCreate:
+      type: object
+      required: [sportId, title, startTime]
+      properties:
+        sportId:   { type: integer }
+        title:     { type: string }
+        description: { type: string }
+        startTime: { type: string, format: date-time }
+        endTime:   { type: string, format: date-time }
+        location:  { type: string }
+
+    # --- Partner-Search ---
+    SearchResult:
+      type: object
+      properties:
+        total: { type: integer }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UserPublic' }
+
+    # --- Club ---
+    Club:
+      type: object
+      properties:
+        id:          { type: integer }
+        name:        { type: string }
+        description: { type: string }
+        ownerId:     { type: integer }
+    ClubCreate:
+      type: object
+      required: [name]
+      properties:
+        name:        { type: string }
+        description: { type: string }
+
+    # --- Reputation ---
+    Reputation:
+      type: object
+      properties:
+        userId:       { type: integer }
+        score:        { type: number }
+        reviewsCount: { type: integer }
+    ReviewCreate:
+      type: object
+      required: [rating, comment]
+      properties:
+        rating:  { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+    Review:
+      allOf:
+        - $ref: '#/components/schemas/ReviewCreate'
+        - type: object
+          properties:
+            id:        { type: integer }
+            authorId:  { type: integer }
+            createdAt: { type: string, format: date-time }
+
+    # --- Notification ---
+    Notification:
+      type: object
+      properties:
+        id:        { type: integer }
+        type:      { type: string }
+        message:   { type: string }
+        createdAt: { type: string, format: date-time }
+        read:      { type: boolean }
