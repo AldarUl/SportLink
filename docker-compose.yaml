@@ -1,67 +1,21 @@
-version: '3.9'
-
+version: "3.9"
 services:
-  # --- инфраструктура ---
   postgres:
-    image: postgres:16
-    env_file: [.env]
-    volumes: [postgres-data:/var/lib/postgresql/data]
-    ports: ['5432:5432']
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-    ports: ['9200:9200']
-
-  # --- backend (микросервисы) ---
-  auth-service:
-    build: ./backend/auth-service
-    ports: ['8081:8080']
-    env_file: [.env]
-    depends_on: [postgres]
-
-  user-service:
-    build: ./backend/user-service
-    ports: ['8082:8080']
-    env_file: [.env]
-    depends_on: [postgres]
-
-  training-service:
-    build: ./backend/training-service
-    ports: ['8083:8080']
-    env_file: [.env]
-    depends_on: [postgres]
-
-  search-service:
-    build: ./backend/search-service
-    ports: ['8084:8080']
-    env_file: [.env]
-    depends_on: [elasticsearch]
-
-  gateway:
-    build: ./backend/gateway
-    ports: ['8080:8080']
-    env_file: [.env]
-    depends_on:
-      - auth-service
-      - user-service
-      - training-service
-      - search-service
-
-  # --- frontend ---
-  web:
-    build: ./frontend/web-app         # Node build → Nginx serve
-    ports: ['3000:80']
-    depends_on: [gateway]             # web ходит на gateway
-
-  # --- Telegram-бот ---
-  telegram-bot:
-    build: ./bots/telegram-bot
-    env_file: [.env]
-    depends_on: [gateway]
+    image: postgres:16-alpine
+    container_name: sportlink-postgres
     restart: unless-stopped
-
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sportlink}
+      POSTGRES_USER: ${POSTGRES_USER:-sportlink}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sportlink} -d ${POSTGRES_DB:-sportlink}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
 volumes:
-  postgres-data:
+  pgdata: {}
