@@ -6,23 +6,14 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="reports" />
-        <module name="sports" />
-        <module name="auth" />
-        <module name="admin" />
-        <module name="users" />
         <module name="sportlink-app" />
-        <module name="common" />
-        <module name="reviews" />
-        <module name="search-feed" />
-        <module name="clubs" />
-        <module name="events" />
-        <module name="notifications" />
-        <module name="applications" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
+      <module name="admin" target="21" />
       <module name="app" target="1.5" />
+      <module name="applications" target="21" />
+      <module name="auth" target="21" />
       <module name="auth-service (2)" target="21" />
       <module name="auth-service (3)" target="21" />
       <module name="auth-service (4)" target="21" />
@@ -30,6 +21,16 @@
       <module name="auth-service (6)" target="21" />
       <module name="auth-service (7)" target="21" />
       <module name="auth-service (8)" target="21" />
+      <module name="clubs" target="21" />
+      <module name="common" target="21" />
+      <module name="events" target="21" />
+      <module name="notifications" target="21" />
+      <module name="reports" target="21" />
+      <module name="reviews" target="21" />
+      <module name="search-feed" target="21" />
+      <module name="sportlink-parent" target="1.5" />
+      <module name="sports" target="21" />
+      <module name="users" target="21" />
     </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
