@@ -1,44 +1,31 @@
-server:
-  port: 8080
-  servlet:
-    context-path: /api
-
 spring:
+  application:
+    name: sportlink-app
   datasource:
-    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB:sportlink}
-    username: ${POSTGRES_USER:sportlink}
-    password: ${POSTGRES_PASSWORD:devpass}
-    hikari:
-      maximum-pool-size: 10
+    url: jdbc:postgresql://localhost:5432/sportlink
+    username: postgres
+    password: password
   jpa:
     hibernate:
-      ddl-auto: validate   # схему управляет Flyway
-    properties:
-      hibernate.jdbc.time_zone: UTC
-      hibernate.format_sql: true
+      ddl-auto: validate
     open-in-view: false
   flyway:
     enabled: true
-    # если миграции лежат в app:
-    locations: classpath:db/migration
-    # если решишь раскладывать по модулям, используй вместо строки выше:
-    # locations: classpath:db/migration,classpath*:/com/sportlink/**/db/migration
 
-  mvc:
-    problemdetails:
-      enabled: true
+server:
+  port: 8080
 
-logging:
-  level:
-    org.hibernate.SQL: warn
-    org.springframework.security: info
+springdoc:
+  api-docs:
+    path: /api-docs
 
-# CORS (под свой фронтенд)
-app:
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
-  security:
-    jwt:
-      secret: ${JWT_SECRET:CHANGE_ME}
-      access-minutes: 15
-      refresh-days: 14
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+security:
+  jwt:
+    secret: "change-me-very-long-random-secret-32b-min"
+    expirationMs: 86400000   # 24 часа
