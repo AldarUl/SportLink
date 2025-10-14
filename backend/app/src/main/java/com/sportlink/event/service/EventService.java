@@ -14,17 +14,14 @@ import java.util.UUID;
 public interface EventService {
     EventResponse create(EventCreateRequest req);
 
-    // ВАЖНО: добавили viewerId
     EventResponse get(UUID id, UUID viewerId);
+    default EventResponse get(UUID id) { return get(id, null); }
 
-    // Для совместимости (можно вызывать без viewerId)
-    default EventResponse get(UUID id) {
-        return get(id, null);
-    }
-
+    // ← добавили clubId
     EventPage search(EventKind kind, String sport,
                      OffsetDateTime from, OffsetDateTime to,
                      EventAccess access, EventAdmission admission,
+                     UUID clubId,
                      int page, int size);
 
     EventResponse update(UUID id, UUID currentUserId, EventUpdateRequest update);

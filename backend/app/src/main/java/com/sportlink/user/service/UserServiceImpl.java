@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.sportlink.notification.service.NotificationService;
 
 import java.util.UUID;
 
@@ -19,6 +20,7 @@ import java.util.UUID;
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
     @Override
     public UserResponse create(UserCreateRequest req) {
@@ -32,6 +34,8 @@ public class UserServiceImpl implements UserService {
                 .role(Role.USER)
                 .build();
         user = userRepository.save(user);
+        notificationService.userRegistered(user.getId(), user.getEmail());
+
         return toDto(user);
     }
 

@@ -1,0 +1,12 @@
+spring:
+  profiles: dev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sportlink
+    username: postgres
+    password: password
+  jpa:
+    hibernate.ddl-auto: validate
+  flyway.enabled: true
+
+logging.level.root: INFO
+logging.level.com.sportlink: DEBUG

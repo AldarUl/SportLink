@@ -45,6 +45,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/user").permitAll() // регистрация
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/event/**", "/api/v1/search/**", "/api/v1/sport/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
+
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/user/*").permitAll()
 
 
@@ -61,6 +63,7 @@ public class SecurityConfig {
 
                         .requestMatchers(HttpMethod.POST, "/api/v1/club/**").hasRole("USER")
                         .requestMatchers(HttpMethod.GET,  "/api/v1/club/*/member").permitAll()
+
 
 
                         // всё остальное — с токеном

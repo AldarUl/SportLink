@@ -15,6 +15,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.sportlink.notification.service.NotificationService;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -29,6 +30,7 @@ public class EventServiceImpl implements EventService {
     private final EventRepository eventRepository;
     private final ApplicationRepository applicationRepository;
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
+    private final NotificationService notificationService;
 
 
     @Override
@@ -43,6 +45,15 @@ public class EventServiceImpl implements EventService {
             boolean isMember = clubMemberRepository.existsByClubIdAndUserId(r.clubId(), r.organizerId());
             if (!isMember) throw new IllegalArgumentException("Organizer must be a club member");
         }
+
+        // startsAt в будущем, длительность в разумных рамках
+        if (r.startsAt() == null || r.startsAt().isBefore(OffsetDateTime.now()))
+            throw new IllegalArgumentException("startsAt must be in the future");
+        if (r.durationMin() == null || r.durationMin() < 10 || r.durationMin() > 1440)
+            throw new IllegalArgumentException("durationMin must be between 10 and 1440");
+
+        if (r.registrationDeadline() != null && !r.registrationDeadline().isBefore(r.startsAt()))
+            throw new IllegalArgumentException("registrationDeadline must be before startsAt");
 
         Event e = Event.builder()
                 .kind(r.kind())
@@ -65,6 +76,8 @@ public class EventServiceImpl implements EventService {
                 .build();
 
         e = eventRepository.save(e);
+        notificationService.eventCreated(e.getId(), e.getTitle(), e.getOrganizerId());
+
         return toDto(e);
     }
 
@@ -87,13 +100,15 @@ public class EventServiceImpl implements EventService {
     public EventPage search(EventKind kind, String sport,
                             OffsetDateTime from, OffsetDateTime to,
                             EventAccess access, EventAdmission admission,
+                            java.util.UUID clubId,
                             int page, int size) {
         Specification<Event> spec = Specification.where(kind(kind))
                 .and(sport(sport))
                 .and(access(access))
                 .and(admission(admission))
                 .and(startsFrom(from))
-                .and(startsTo(to));
+                .and(startsTo(to))
+                .and(club(clubId)); // ← добавили
 
         var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "startsAt"));
         var pg = eventRepository.findAll(spec, pageable);
@@ -114,6 +129,14 @@ public class EventServiceImpl implements EventService {
         if (u.sport() != null) e.setSport(u.sport());
         if (u.description() != null) e.setDescription(u.description());
         if (u.startsAt() != null) e.setStartsAt(u.startsAt());
+        if (u.startsAt() != null && u.startsAt().isBefore(OffsetDateTime.now()))
+            throw new IllegalArgumentException("startsAt must be in the future");
+        if (u.durationMin() != null && (u.durationMin() < 10 || u.durationMin() > 1440))
+            throw new IllegalArgumentException("durationMin must be between 10 and 1440");
+        if (u.registrationDeadline() != null && u.startsAt() != null
+                && !u.registrationDeadline().isBefore(u.startsAt()))
+            throw new IllegalArgumentException("registrationDeadline must be before startsAt");
+
         if (u.durationMin() != null) e.setDurationMin(u.durationMin());
         if (u.capacity() != null) {
             if (e.getKind() == EventKind.TRAINING && u.capacity() > 50)

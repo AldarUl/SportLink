@@ -13,7 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.sportlink.notification.service.NotificationService;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Service
@@ -24,6 +26,8 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final ApplicationRepository appRepo;
     private final EventRepository eventRepo;
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
+    private final NotificationService notificationService;
+
 
     @Override
     public ApplicationResponse apply(UUID eventId, UUID userId) {
@@ -32,6 +36,17 @@ public class ApplicationServiceImpl implements ApplicationService {
         }
         Event e = eventRepo.findById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found"));
+
+        // после получения Event e
+        if (e.getStartsAt().isBefore(OffsetDateTime.now()))
+            throw new IllegalStateException("Event already started");
+        if (e.getRegistrationDeadline() != null && !OffsetDateTime.now().isBefore(e.getRegistrationDeadline()))
+            throw new IllegalStateException("Registration is closed");
+
+        // запрет накладок с уже подтверждёнными у пользователя
+        if (hasTimeConflict(userId, e)) {
+            throw new IllegalStateException("Time conflict with another confirmed event");
+        }
 
         ApplicationStatus target;
         if (e.getAdmission() == EventAdmission.AUTO) {
@@ -55,6 +70,8 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         Application a = appRepo.save(Application.builder()
                 .eventId(eventId).userId(userId).status(target).build());
+        notificationService.applicationSubmitted(eventId, userId);
+
         return toDto(a);
     }
 
@@ -81,6 +98,8 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         a.setStatus(ApplicationStatus.CONFIRMED);
         a = appRepo.save(a);
+        notificationService.applicationConfirmed(e.getId(), a.getUserId());
+
         return toDto(a);
     }
 
@@ -104,6 +123,8 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (wasConfirmed && e.isWaitlistEnabled()) {
             promoteFromWaitlistIfPossible(e);
         }
+        notificationService.applicationDeclined(e.getId(), a.getUserId());
+
         return toDto(a);
     }
 
@@ -144,6 +165,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         if (wasConfirmed && e.isWaitlistEnabled()) {
             promoteFromWaitlistIfPossible(e);
         }
+        notificationService.applicationWithdrawn(e.getId(), a.getUserId());
     }
 
     /* helpers */
@@ -156,6 +178,7 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .ifPresent(wait -> {
                     wait.setStatus(ApplicationStatus.CONFIRMED);
                     appRepo.save(wait);
+                    notificationService.applicationConfirmed(e.getId(), wait.getUserId());
                 });
     }
 
@@ -167,5 +190,24 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     private ApplicationResponse toDto(Application a) {
         return new ApplicationResponse(a.getId(), a.getEventId(), a.getUserId(), a.getStatus());
+    }
+
+    private boolean hasTimeConflict(UUID userId, Event target) {
+        var confirmed = appRepo.findByUserIdAndStatus(userId, ApplicationStatus.CONFIRMED);
+        if (confirmed.isEmpty()) return false;
+
+        var targetStart = target.getStartsAt();
+        var targetEnd   = target.getStartsAt().plusMinutes(target.getDurationMin());
+
+        for (var a : confirmed) {
+            var other = eventRepo.findById(a.getEventId()).orElse(null);
+            if (other == null) continue;
+            var otherStart = other.getStartsAt();
+            var otherEnd   = other.getStartsAt().plusMinutes(other.getDurationMin());
+            // пересечение интервалов
+            boolean overlap = !targetEnd.isBefore(otherStart) && !otherEnd.isBefore(targetStart);
+            if (overlap) return true;
+        }
+        return false;
     }
 }

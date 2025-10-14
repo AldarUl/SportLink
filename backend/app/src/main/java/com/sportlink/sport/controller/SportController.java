@@ -5,6 +5,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@io.swagger.v3.oas.annotations.tags.Tag(name = "Sport", description = "Справочник видов спорта")
 @RestController
 @RequestMapping("/api/v1/sport")
 public class SportController {

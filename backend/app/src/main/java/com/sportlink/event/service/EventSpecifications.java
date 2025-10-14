@@ -4,6 +4,7 @@ import com.sportlink.event.model.*;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 public final class EventSpecifications {
     private EventSpecifications(){}
@@ -26,5 +27,8 @@ public final class EventSpecifications {
     }
     public static Specification<Event> startsTo(OffsetDateTime to) {
         return to == null ? null : (root, q, cb) -> cb.lessThanOrEqualTo(root.get("startsAt"), to);
+    }
+    public static Specification<Event> club(UUID clubId) {
+        return clubId == null ? null : (root, q, cb) -> cb.equal(root.get("clubId"), clubId);
     }
 }

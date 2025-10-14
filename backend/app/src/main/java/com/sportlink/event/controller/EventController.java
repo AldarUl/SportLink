@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+@io.swagger.v3.oas.annotations.tags.Tag(name = "Event", description = "События и тренировки")
 @RestController
 @RequestMapping("/api/v1/event")
 @RequiredArgsConstructor
@@ -33,6 +34,8 @@ public class EventController {
         return u.getId();
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Создать событие/тренировку")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping
     public EventResponse create(@RequestBody @Valid EventCreateRequest req, Authentication auth) {
         // Организатор в запросе должен совпадать с текущим пользователем
@@ -43,6 +46,7 @@ public class EventController {
         return eventService.create(req);
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Детали события")
     @GetMapping("/{id}")
     public EventResponse get(@PathVariable UUID id, org.springframework.security.core.Authentication auth) {
         java.util.UUID viewer = (auth == null) ? null : currentUserId(auth);
@@ -50,6 +54,7 @@ public class EventController {
     }
 
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Поиск событий (пагинация и фильтры)")
     @GetMapping
     public EventPage search(
             @RequestParam(required = false) EventKind kind,
@@ -58,12 +63,15 @@ public class EventController {
             @RequestParam(required = false) OffsetDateTime to,
             @RequestParam(required = false) EventAccess access,
             @RequestParam(required = false) EventAdmission admission,
+            @RequestParam(required = false) java.util.UUID clubId,   // ← добавили
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return eventService.search(kind, sport, from, to, access, admission, page, size);
+        return eventService.search(kind, sport, from, to, access, admission, clubId, page, size);
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Изменить событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PatchMapping("/{id}")
     public EventResponse update(@PathVariable UUID id,
                                 @RequestBody @Valid EventUpdateRequest req,
@@ -71,11 +79,15 @@ public class EventController {
         return eventService.update(id, currentUserId(auth), req);
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Отменить событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping("/{id}/cancel")
     public void cancel(@PathVariable UUID id, Authentication auth) {
         eventService.cancel(id, currentUserId(auth));
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Опубликовать событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping("/{id}/publish")
     public void publish(@PathVariable UUID id, Authentication auth) {
         eventService.publish(id, currentUserId(auth));

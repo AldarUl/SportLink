@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
+@io.swagger.v3.oas.annotations.tags.Tag(name = "Admin", description = "Администрирование")
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
@@ -20,12 +21,18 @@ public class AdminController {
 
     private final AdminService adminService;
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Проверка доступности")
     @GetMapping("/ping")
     public String ping() { return "ok"; }
 
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Сводка по системе")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @GetMapping("/summary")
     public AdminSummary summary() { return adminService.summary(); }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Пользователи (пагинация)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @GetMapping("/user")
     public PageResponse<AdminUser> users(@RequestParam(defaultValue = "0") int page,
                                          @RequestParam(defaultValue = "20") int size) {
@@ -33,6 +40,8 @@ public class AdminController {
         return adminService.listUsers(pageable);
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "События (фильтр по статусу, пагинация)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @GetMapping("/event")
     public PageResponse<AdminEvent> events(@RequestParam(required = false) EventStatus status,
                                            @RequestParam(defaultValue = "0") int page,
@@ -40,9 +49,13 @@ public class AdminController {
         return adminService.listEvents(status, PageRequest.of(page, size));
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Отменить событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping("/event/{id}/cancel")
     public void cancel(@PathVariable UUID id) { adminService.cancelEvent(id); }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Опубликовать событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping("/event/{id}/publish")
     public void publish(@PathVariable UUID id) { adminService.publishEvent(id); }
 }

@@ -8,6 +8,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import com.auth0.jwt.exceptions.JWTVerificationException;
 
 import java.util.stream.Collectors;
 
@@ -50,5 +52,19 @@ public class GlobalExceptionHandler {
                                               org.springframework.web.context.request.WebRequest req) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiError.of(ex.getMessage(), "FORBIDDEN", req.getDescription(false)));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> typeMismatch(MethodArgumentTypeMismatchException ex,
+                                                 org.springframework.web.context.request.WebRequest req) {
+        String msg = "Invalid parameter: " + ex.getName();
+        return ResponseEntity.badRequest().body(ApiError.of(msg, "TYPE_MISMATCH", req.getDescription(false)));
+    }
+
+    @ExceptionHandler(JWTVerificationException.class)
+    public ResponseEntity<ApiError> jwtInvalid(JWTVerificationException ex,
+                                               org.springframework.web.context.request.WebRequest req) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiError.of("Invalid or expired token", "UNAUTHORIZED", req.getDescription(false)));
     }
 }
