@@ -11,23 +11,26 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   maildev:
-    image: maildev/maildev:2
+    image: maildev/maildev:latest
     ports: ["1080:1080", "1025:1025"]
+    restart: unless-stopped
 
   app:
     build:
       context: ./backend/app
       dockerfile: Dockerfile
     environment:
+      SPRING_PROFILES_ACTIVE: dev             # чтобы сидер отработал
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sportlink
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
-      SPRING_PROFILES_ACTIVE: prod
       SECURITY_JWT_SECRET: change-me-very-long-random-secret-32b-min
       SECURITY_JWT_EXPIRATIONMS: 86400000
     ports: ["8080:8080"]
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped

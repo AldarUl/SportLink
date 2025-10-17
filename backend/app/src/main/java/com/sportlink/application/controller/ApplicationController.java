@@ -8,6 +8,7 @@ import com.sportlink.user.model.User;
 import com.sportlink.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,26 +30,25 @@ public class ApplicationController {
         return u.getId();
     }
 
-    /** Подать заявку (тело: eventId; userId проверяем по токену) */
+    /** Подать заявку (в теле только eventId; userId берём из токена) */
     @io.swagger.v3.oas.annotations.Operation(summary = "Подать заявку")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping
     public ApplicationResponse apply(@RequestBody @Valid ApplicationCreateRequest req, Authentication auth) {
         UUID me = currentUserId(auth);
-        if (!me.equals(req.userId()))
-            throw new IllegalArgumentException("userId must be current user");
         return applicationService.apply(req.eventId(), me);
     }
 
-    /** Список заявок по событию (только организатор) */
+    /** Заявки по событию (только организатор) */
     @io.swagger.v3.oas.annotations.Operation(summary = "Заявки по событию (организатор)")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    // @PreAuthorize("hasRole('ORGANIZER') or hasRole('ADMIN')") // опционально, если включена методовая безопасность
     @GetMapping("/by-event/{eventId}")
     public ApplicationPage listByEvent(@PathVariable UUID eventId,
                                        @RequestParam(defaultValue = "0") int page,
                                        @RequestParam(defaultValue = "20") int size,
                                        Authentication auth) {
-        return applicationService.listByEvent(eventId, page, size, currentUserId(auth));
+        return applicationService.listByEvent(eventId, page, Math.min(Math.max(size, 1), 100), currentUserId(auth));
     }
 
     /** Мои заявки (по токену) */
@@ -58,7 +58,7 @@ public class ApplicationController {
     public ApplicationPage my(@RequestParam(defaultValue = "0") int page,
                               @RequestParam(defaultValue = "20") int size,
                               Authentication auth) {
-        return applicationService.listMy(currentUserId(auth), page, size);
+        return applicationService.listMy(currentUserId(auth), page, Math.min(Math.max(size, 1), 100));
     }
 
     /** Отозвать свою заявку */
@@ -72,6 +72,7 @@ public class ApplicationController {
     /** Подтвердить заявку (организатор) */
     @io.swagger.v3.oas.annotations.Operation(summary = "Подтвердить заявку (организатор)")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    // @PreAuthorize("hasRole('ORGANIZER') or hasRole('ADMIN')")
     @PostMapping("/{applicationId}/confirm")
     public ApplicationResponse confirm(@PathVariable UUID applicationId, Authentication auth) {
         return applicationService.confirm(applicationId, currentUserId(auth));
@@ -80,6 +81,7 @@ public class ApplicationController {
     /** Отклонить заявку (организатор) */
     @io.swagger.v3.oas.annotations.Operation(summary = "Отклонить заявку (организатор)")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    // @PreAuthorize("hasRole('ORGANIZER') or hasRole('ADMIN')")
     @PostMapping("/{applicationId}/decline")
     public ApplicationResponse decline(@PathVariable UUID applicationId, Authentication auth) {
         return applicationService.decline(applicationId, currentUserId(auth));

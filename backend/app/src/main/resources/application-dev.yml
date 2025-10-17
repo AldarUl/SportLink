@@ -1,12 +1,27 @@
 spring:
-  profiles: dev
   datasource:
     url: jdbc:postgresql://localhost:5432/sportlink
     username: postgres
     password: password
   jpa:
-    hibernate.ddl-auto: validate
-  flyway.enabled: true
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
 
-logging.level.root: INFO
-logging.level.com.sportlink: DEBUG
+logging:
+  level:
+    root: INFO
+    com.sportlink: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,threaddump,httpexchanges
+  endpoint:
+    health:
+      show-details: always       # покажет детали UP/DOWN
+  metrics:
+    tags:
+      application: sportlink-app # общий тег

@@ -23,4 +23,8 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     Optional<Application> findFirstByEventIdAndStatusOrderByCreatedAtAsc(UUID eventId, ApplicationStatus status);
 
     List<Application> findByUserIdAndStatus(UUID userId, ApplicationStatus status);
+
+    boolean existsByEventIdAndUserIdAndStatus(UUID eventId, UUID userId, ApplicationStatus status);
+
+    Optional<Application> findByEventIdAndUserId(UUID eventId, UUID userId);
 }
