@@ -1,0 +1,22 @@
+export type Event = {
+  id: string;
+  kind: string;
+  title: string;
+  sport: string;
+  description?: string | null;
+  startsAt: string;
+  durationMin: number;
+  capacity: number;
+  waitlistEnabled: boolean;
+  access: string;
+  admission: string;
+  recurrenceRule?: string | null;
+  registrationDeadline?: string | null;
+  organizerId: string;
+  clubId?: string | null;
+  status: string;
+  locationLat: number | null;
+  locationLon: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
