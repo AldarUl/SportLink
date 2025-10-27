@@ -1,23 +1,30 @@
+// src/features/auth/api.ts
 import { http } from "@/api/http";
 import { useAuthStore } from "./store";
 
 export async function login(email: string, password: string) {
   const { data } = await http.post("/auth/login", { email, password });
+  // если бек выдаёт access/refresh — сохрани тут
   useAuthStore.getState().setTokens({
     accessToken: data.accessToken,
-    refreshToken: data.refreshToken
+    refreshToken: data.refreshToken,
   });
   return data;
 }
 
-export async function register(payload: { name?: string; email: string; password: string }) {
-  const { data } = await http.post("/auth/register", payload);
-  // если бэкенд сразу выдаёт токены — сохрани их тут
-  return data;
+export async function register(payload: {
+  displayName: string;
+  email: string;
+  password: string;
+}) {
+  // регистрация у тебя на /api/v1/user
+  const { data } = await http.post("/user", payload);
+  return data; // { id, email, displayName }
 }
 
 export async function fetchMe() {
-  const { data } = await http.get("/users/me");
+  // по свагеру: GET /api/v1/auth/me
+  const { data } = await http.get("/auth/me");
   useAuthStore.getState().setUser(data);
   return data;
 }
