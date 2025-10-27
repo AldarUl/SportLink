@@ -55,6 +55,8 @@ public class SecurityConfig {
                 .authenticationProvider(daoAuthProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll(); // <— ДОБАВЬ
+
                     // Swagger / OpenAPI
                     auth.requestMatchers(
                             "/api-docs/**",
@@ -127,22 +129,32 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /** Единый бин CORS, источники — из application*.yml */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
 
+        // Если задано через свойства — используй их, иначе дефолты
         List<String> origins = (allowedOrigins == null || allowedOrigins.isEmpty())
-                ? List.of("http://localhost:3000", "http://localhost:5173")
+                ? List.of("http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:*")
                 : allowedOrigins;
 
-        cfg.setAllowedOrigins(origins);
-        cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
-        cfg.setAllowedHeaders(List.of("*"));
+        // ВАЖНО: для гибкости используем patterns
+        cfg.setAllowedOriginPatterns(origins);
         cfg.setAllowCredentials(true);
+
+        // Явно перечислим методы/заголовки для preflight
+        cfg.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
+        cfg.setAllowedHeaders(List.of(
+                "Authorization", "Content-Type", "Accept", "Origin",
+                "X-Requested-With", "Access-Control-Request-Method", "Access-Control-Request-Headers"
+        ));
+        // Что браузеру можно читать из ответа (часто нужно)
+        cfg.setExposedHeaders(List.of("Authorization", "Location"));
+        cfg.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource src = new UrlBasedCorsConfigurationSource();
         src.registerCorsConfiguration("/**", cfg);
         return src;
     }
+
 }
