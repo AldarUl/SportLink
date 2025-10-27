@@ -127,7 +127,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /** Единый бин CORS, источники — из application*.yml */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
