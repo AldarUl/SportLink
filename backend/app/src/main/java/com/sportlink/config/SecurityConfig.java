@@ -55,6 +55,8 @@ public class SecurityConfig {
                 .authenticationProvider(daoAuthProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
+
                     // Swagger / OpenAPI
                     auth.requestMatchers(
                             "/api-docs/**",
