@@ -1,27 +1,35 @@
 // src/api/http.ts
 import axios from "axios";
-import type { AxiosError, InternalAxiosRequestConfig } from "axios";
+import type { AxiosError, AxiosRequestConfig } from "axios";
 import { useAuthStore } from "@/features/auth/store";
 
-const API_URL = import.meta.env.VITE_API_URL as string; // напр.: http://localhost:8080/api/v1
+const API_URL = (import.meta.env.VITE_API_URL as string) ?? "/api/v1";
+
+function getAccessToken(): string | null {
+  const s = useAuthStore.getState();
+  if (s?.accessToken) return s.accessToken;
+  try {
+    const raw = localStorage.getItem("sportlink_tokens");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.accessToken ?? null;
+  } catch { return null; }
+}
 
 export const http = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
 });
 
-// Добавляем Bearer из стора / localStorage
-http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
-  const token = useAuthStore.getState().accessToken || localStorage.getItem("token");
+// Важно: тип импортирован как `type`, чтобы не было рантайм-экспортов
+http.interceptors.request.use((cfg: AxiosRequestConfig) => {
+  const token = getAccessToken();
   if (token) {
-    const h = (cfg.headers ?? {}) as unknown as Record<string, string>;
-    h.Authorization = `Bearer ${token}`;
-    cfg.headers = h as unknown as InternalAxiosRequestConfig["headers"];
+    cfg.headers = { ...(cfg.headers || {}), Authorization: `Bearer ${token}` };
   }
   return cfg;
 });
 
-// Без авто-рефреша: при 401 — logout
 http.interceptors.response.use(
   (r) => r,
   (error: AxiosError) => {

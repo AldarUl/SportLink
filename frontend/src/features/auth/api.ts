@@ -5,10 +5,9 @@ import { useAuthStore } from "./store";
 export async function login(email: string, password: string) {
   const { data } = await http.post("/auth/login", { email, password });
   // если бек выдаёт access/refresh — сохрани тут
-  useAuthStore.getState().setTokens({
-    accessToken: data.accessToken,
-    refreshToken: data.refreshToken,
-  });
+  // src/features/auth/api.ts
+  useAuthStore.getState().setTokens({ accessToken: data.token, refreshToken: null });
+
   return data;
 }
 
