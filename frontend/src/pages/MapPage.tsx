@@ -1,16 +1,12 @@
 // src/pages/MapPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as ReactDOM from "react-dom"; // для reactify.bindTo
+import * as ReactDOM from "react-dom";
 import { loadYmaps3 } from "@/lib/loadYmaps3";
 import { useEventStore } from "@/entities/event/store";
 import type { Event as AppEvent } from "@/entities/event/types";
-import { myConfirmedEvents, applyToEvent } from "@/entities/application/api";
+import { useApplicationStore } from "@/entities/application/store";
 import { willOverlapWithAny } from "@/shared/schedule";
 
-
-
-
-// ВАЖНО для v3: порядок координат [lng, lat]
 type LngLat = [number, number];
 
 export default function MapPage() {
@@ -18,49 +14,46 @@ export default function MapPage() {
 
   const [apiReady, setApiReady] = useState(false);
   const [Y, setY] = useState<any>(null);
-  const [UI, setUI] = useState<any>(null);
 
-  // Текущее положение камеры
   const [location, setLocation] = useState({
     center: [37.618423, 55.751244] as LngLat,
     zoom: 12,
   });
 
-  // Геолокация
   const [myPos, setMyPos] = useState<LngLat | null>(null);
   const [geoPending, setGeoPending] = useState(true);
   const [geoError, setGeoError] = useState<string | null>(null);
 
-  const [eta, setEta] = useState("");
+  const [selected, setSelected] = useState<{ e: AppEvent; coords: LngLat } | null>(null);
 
+  // --- Yandex Maps v3 + reactify ---
+  useEffect(() => {
+    (async () => {
+      await loadYmaps3(import.meta.env.VITE_YANDEX_MAPS_API_KEY as string, "ru_RU");
+      const ym3 = (window as any).ymaps3;
+      const [ymaps3React] = await Promise.all([ym3.import("@yandex/ymaps3-reactify"), ym3.ready]);
+      const reactify = ymaps3React.reactify.bindTo(React, ReactDOM);
+      const base = reactify.module(ym3);
+      setY(base);
+      setApiReady(true);
+    })();
+  }, []);
 
+  // ---- Application store ----
+  const {
+    mine,
+    loadMine,
+    apply: applyAction,
+    withdrawByEvent,
+    findByEventId,
+  } = useApplicationStore();
 
-  // === ЗАГРУЗКА API V3 + reactify ===
-useEffect(() => {
-  (async () => {
-    await loadYmaps3(import.meta.env.VITE_YANDEX_MAPS_API_KEY as string, "ru_RU");
-    const ym3 = (window as any).ymaps3;
+  useEffect(() => {
+    loadMine();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // 👇 было bindTo(React) — нужно bindTo(React, ReactDOM)
-    const [ymaps3React] = await Promise.all([
-      ym3.import("@yandex/ymaps3-reactify"),
-      ym3.ready,
-    ]);
-
-    const reactify = ymaps3React.reactify.bindTo(React, ReactDOM);
-    const base = reactify.module(ym3);
-    const theme = reactify.module(await ym3.import("@yandex/ymaps3-default-ui-theme"));
-
-    setY(base);
-    setUI(theme);
-    setApiReady(true);
-  })();
-}, []);
-
-
-
-
-  // === ГЕОЛОКАЦИЯ ===
+  // --- Geolocation ---
   useEffect(() => {
     if (!apiReady) return;
     if (!navigator.geolocation) {
@@ -90,11 +83,9 @@ useEffect(() => {
     );
   }, [apiReady]);
 
-  const recenterToMe = () => {
-    if (myPos) setLocation({ center: myPos, zoom: 15 });
-  };
+  const recenterToMe = () => myPos && setLocation({ center: myPos, zoom: 15 });
 
-  // === ФЕТЧ ПО ВЬЮПОРТУ (debounce) ===
+  // --- Debounced viewport fetch ---
   const debounceRef = useRef<number | null>(null);
   const debouncedFetchViewport = (bbox: {
     minLat: number; minLon: number; maxLat: number; maxLon: number;
@@ -105,100 +96,49 @@ useEffect(() => {
     }, 350);
   };
 
-  // Преобразуем bounds из v3 ([ [minLng,minLat], [maxLng,maxLat] ]) к нашему API
   const handleBounds = (b: any) => {
     if (!Array.isArray(b) || !Array.isArray(b[0]) || !Array.isArray(b[1])) return;
     const [[minLng, minLat], [maxLng, maxLat]] = b as [[number, number],[number, number]];
-    debouncedFetchViewport({
-      minLat, minLon: minLng,
-      maxLat, maxLon: maxLng,
-    });
+    debouncedFetchViewport({ minLat, minLon: minLng, maxLat, maxLon: maxLng });
   };
 
-
-
-
-function PopupContent({
-  e,
-  myPos,
-  coords,
-}: {
-  e: AppEvent;
-  myPos: [number, number] | null;
-  coords: [number, number];
-}) {
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function onJoin() {
-    setErr(null); setMsg(null); setBusy(true);
+  // --- Apply with overlap check ---
+  const handleApply = async (ev: AppEvent) => {
     try {
-      // 1) мои подтверждённые будущие тренировки
-      const confirmed = await myConfirmedEvents();
+      const active = mine
+        .filter(a => a.event && (a.status === "CONFIRMED" || a.status === "PENDING"))
+        .map(a => ({ start: a.event!.startsAt, durMin: a.event!.durationMin }));
 
-      // 2) проверка пересечения
-      if (willOverlapWithAny(e, confirmed)) {
-        setErr("У вас уже есть подтверждённая тренировка в это время.");
+      const want = { start: ev.startsAt, durMin: ev.durationMin };
+      if (willOverlapWithAny(want, active)) {
+        alert("Нельзя записаться: пересечение по времени с уже активной тренировкой.");
         return;
       }
-
-      // 3) отправка заявки
-      await applyToEvent(e.id);
-      setMsg("Заявка отправлена");
-    } catch (ex:any) {
-      setErr(ex?.response?.data?.message ?? "Не удалось подать заявку");
-    } finally {
-      setBusy(false);
+      await applyAction(ev);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.response?.data?.message || "Не удалось подать заявку");
     }
-  }
+  };
 
-  return (
-    <div style={{ minWidth: 240 }}>
-      <div style={{ fontWeight: 600 }}>{e.title}</div>
-      <div style={{ fontSize: 12, color: "#64748b", margin: "4px 0" }}>
-        {(e.kind === "TRAINING" ? "Тренировка" : "Событие") +
-          " • " + (e.sport ?? "") + " • " + formatDateTime(e.startsAt)}
-      </div>
-      {e.description && <div style={{ fontSize: 13, lineHeight: 1.3 }}>{e.description}</div>}
-      {err && <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c" }}>{err}</div>}
-      {msg && <div style={{ marginTop: 8, fontSize: 12, color: "#065f46" }}>{msg}</div>}
-      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button className="sl-btn" onClick={() => openRouteExternal(myPos ?? undefined, coords)}>
-          Маршрут
-        </button>
-        <button className="sl-btn sl-btn--primary" disabled={busy} onClick={onJoin}>
-          {busy ? "Отправляем…" : "Записаться"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
-  // === МАРКЕРЫ ===
+  // --- Data for markers ---
   const markers = useMemo(
     () => (events as AppEvent[]).filter(e => e.locationLat != null && e.locationLon != null),
     [events]
   );
 
-  if (!apiReady || !Y || !UI) {
-    return <div className="w-full h-full" />;
-  }
+  if (!apiReady || !Y) return <div className="w-full h-full" />;
 
   const {
     YMap,
     YMapDefaultSchemeLayer,
     YMapDefaultFeaturesLayer,
     YMapMarker,
-    YMapListener,   // слушаем обновления камеры, чтобы звать fetchViewport
+    YMapListener,
   } = Y;
-
-  const { YMapDefaultMarker } = UI;
 
   return (
     <div className="relative h-full w-full">
-      {/* геолокация */}
       {geoPending && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/75 backdrop-blur-sm">
           <div className="animate-pulse text-sm text-gray-700">Определяем ваше местоположение…</div>
@@ -210,7 +150,6 @@ function PopupContent({
         </div>
       )}
 
-      {/* кнопка "моё место" */}
       <button
         onClick={recenterToMe}
         className="absolute right-3 top-3 z-20 rounded-full bg-white/95 px-3 py-1 text-sm shadow"
@@ -218,117 +157,111 @@ function PopupContent({
         Моё место
       </button>
 
-      {/* ETA (placeholder) */}
-      {eta && (
-        <div className="absolute z-10 m-3 rounded-xl bg-black/70 text-white px-3 py-2">{eta}</div>
-      )}
-
-      {/* КАРТА v3 */}
       <YMap location={location} className="w-full h-full" showScaleInCopyrights>
         <YMapDefaultSchemeLayer />
         <YMapDefaultFeaturesLayer />
 
-        {/* Слушаем обновления камеры: при первом рендере тоже приходит */}
         <YMapListener
-          // e.location.bounds — текущие границы вьюпорта (в координатах карты)
-        onUpdate={(e:any) => {
-          if (e?.location?.zoom < 11) return;
-          const b = e?.location?.bounds;
-          if (b) handleBounds(b);
-        }}
+          onUpdate={(e: any) => {
+            if (e?.location?.zoom < 11) return;
+            const b = e?.location?.bounds;
+            if (b) handleBounds(b);
+          }}
+          onClick={() => setSelected(null)} // клик по карте — закрыть попап
         />
 
-        {/* Мой маркер */}
+        {/* мой маркер */}
         {myPos && (
           <YMapMarker coordinates={myPos} zIndex={1000}>
-            <div
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: 8,
-                background: "#2563eb",
-                border: "3px solid #fff",
-                boxShadow: "0 6px 18px rgba(0,0,0,.25)",
-              }}
-              title="Вы здесь"
-            />
+            <div className="sl-pin sl-pin--user" title="Вы здесь" />
           </YMapMarker>
         )}
 
-{/* События/тренировки */}
-{markers.map((e) => {
-  const coords: LngLat = [e.locationLon as number, e.locationLat as number];
-  const color =
-    (e.kind || "EVENT").toUpperCase() === "TRAINING" ? "lightblue" : "orange";
+        {/* события / тренировки */}
+        {markers.map((e) => {
+          const coords: LngLat = [e.locationLon as number, e.locationLat as number];
+          const isTraining = (e.kind || "EVENT").toUpperCase() === "TRAINING";
+          const hasApp = Boolean(findByEventId(e.id));
+          const active = selected?.e.id === e.id;
 
-  return (
-    <YMapDefaultMarker
-      key={e.id}
-      coordinates={coords}
-      color={color}
-      size="normal"
-      title={e.title}
-      subtitle={`${e.kind === "TRAINING" ? "Тренировка" : "Событие"} • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`}
-      popup={{
-        position: "right",
-        content: <PopupContent e={e} myPos={myPos} coords={coords} />,
-      }}
-    />
-  );
-})}
+          return (
+            <React.Fragment key={e.id}>
+              <YMapMarker coordinates={coords} zIndex={active ? 1500 : 500}>
+                <div
+                  className={`sl-pin ${isTraining ? "sl-pin--training" : "sl-pin--event"} ${active ? "sl-pin--active" : ""}`}
+                  title={`${e.title} • ${(e.kind === "TRAINING" ? "Тренировка" : "Событие")}`}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    setSelected({ e, coords });
+                  }}
+                />
+              </YMapMarker>
 
-
+              {/* попап-«балун» */}
+              {active && (
+                <YMapMarker coordinates={coords} zIndex={2000}>
+                  <div
+                    className="pointer-events-auto"
+                    onClick={(ev) => ev.stopPropagation()}
+                    style={{
+                      transform: "translate(20px, -10px)", // смещение вправо-вверх от пина
+                    }}
+                  >
+                    <PopupCard
+                      e={e}
+                      myPos={myPos}
+                      coords={coords}
+                      hasApp={hasApp}
+                      onApply={handleApply}
+                      onWithdraw={(eventId) => withdrawByEvent(eventId)}
+                      onClose={() => setSelected(null)}
+                    />
+                  </div>
+                </YMapMarker>
+              )}
+            </React.Fragment>
+          );
+        })}
       </YMap>
 
-      {/* подсказка снизу-слева */}
-      <div className="absolute bottom-3 left-3 rounded-xl bg-white/90 px-3 py-2 text-sm shadow pointer-events-none">
-        Кликни на карте, чтобы выбрать место события
-      </div>
-
-      {/* Правый сайдбар */}
-      <div className="pointer-events-none absolute right-3 top-16 z-20 flex w-[320px] flex-col gap-3">
-        <div className="pointer-events-auto">
-          <Card title="Тренировки ваших клубов">
-            <MiniItem title="Boxing — Sat 18:00" meta="Клуб «Спарта» · м. Парк Культуры" />
-            <MiniItem title="Running — Sun 09:00" meta="Клуб «Койоты» · Воробьёвы горы" />
-          </Card>
-        </div>
-        <div className="pointer-events-auto">
-          <Card title="Рядом">
-            <MiniItem title="City Run 5k" meta="Сегодня · 2.1 км" />
-            <MiniItem title="CrossFit WOD" meta="Завтра · 1.3 км" />
-          </Card>
-        </div>
-      </div>
-
-      {/* Bottom-sheet */}
+      {/* Bottom-sheet (как было) */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 mx-auto w-[min(960px,95%)]">
         <div className="pointer-events-auto rounded-2xl bg-white/95 p-3 shadow-xl">
           <div className="mb-2 text-sm font-semibold text-gray-700">Мои ближайшие тренировки</div>
           <div className="flex flex-wrap gap-3">
-            {(events.slice(0, 3) as AppEvent[]).map((e) => (
-              <div key={e.id} className="flex min-w-[260px] flex-1 items-center justify-between rounded-xl border px-3 py-2">
-                <div>
-                  <div className="font-medium">{e.title}</div>
-                  <div className="text-xs text-gray-500">{formatDateTime(e.startsAt)}</div>
+            {mine
+              .filter(a => a.event && (a.status === "CONFIRMED" || a.status === "PENDING"))
+              .sort((a, b) => new Date(a.event!.startsAt).getTime() - new Date(b.event!.startsAt).getTime())
+              .slice(0, 3)
+              .map((a) => (
+                <div key={a.id} className="flex min-w-[260px] flex-1 items-center justify-between rounded-xl border px-3 py-2">
+                  <div>
+                    <div className="font-medium">{a.event?.title ?? "Тренировка"}</div>
+                    <div className="text-xs text-gray-500">{a.event ? formatDateTime(a.event.startsAt) : ""}</div>
+                    <div className="text-[11px] text-gray-500">Статус: {a.status}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      className="rounded-md border px-2 py-1 text-xs"
+                      onClick={() => {
+                        const to: LngLat | null =
+                          a.event?.locationLat != null && a.event?.locationLon != null
+                            ? [a.event.locationLon!, a.event.locationLat!]
+                            : null;
+                        if (to) openRouteExternal(myPos ?? undefined, to);
+                      }}
+                    >
+                      Маршрут
+                    </button>
+                    <button
+                      className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700"
+                      onClick={() => a.event && withdrawByEvent(a.event.id)}
+                    >
+                      Отозвать
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    className="rounded-md border px-2 py-1 text-xs"
-                    onClick={() => {
-                      const to: LngLat | null =
-                        e.locationLat != null && e.locationLon != null
-                          ? [e.locationLon, e.locationLat]
-                          : null;
-                      if (to) openRouteExternal(myPos ?? undefined, to);
-                    }}
-                  >
-                    Маршрут
-                  </button>
-                  <button className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">Отозвать</button>
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
           <div className="mt-1 text-[11px] text-gray-500">* максимум 3 активные тренировки без пересечений по времени</div>
         </div>
@@ -337,38 +270,52 @@ function PopupContent({
   );
 }
 
-// ===== Утилиты =====
+// ---------- Вспомогательные компоненты/утилиты ----------
+function PopupCard({
+  e, myPos, coords, hasApp, onApply, onWithdraw, onClose,
+}: {
+  e: AppEvent;
+  myPos: [number, number] | null;
+  coords: [number, number];
+  hasApp: boolean;
+  onApply: (e: AppEvent) => void;
+  onWithdraw: (eventId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="relative w-72 rounded-xl bg-white p-3 shadow-xl">
+      <button
+        onClick={onClose}
+        className="absolute right-2 top-2 rounded px-2 text-sm text-gray-500 hover:bg-gray-100"
+        aria-label="Закрыть"
+      >
+        ×
+      </button>
+      <div className="font-semibold">{e.title}</div>
+      <div className="mt-1 text-[12px] text-gray-500">
+        {(e.kind === "TRAINING" ? "Тренировка" : "Событие")} • {e.sport ?? ""} • {formatDateTime(e.startsAt)}
+      </div>
+      {e.description && <div className="mt-2 text-[13px]">{e.description}</div>}
+      <div className="mt-3 flex gap-2">
+        <button className="sl-btn" onClick={() => openRouteExternal(myPos ?? undefined, coords)}>Маршрут</button>
+        {!hasApp ? (
+          <button className="sl-btn sl-btn--primary" onClick={() => onApply(e)}>Записаться</button>
+        ) : (
+          <button className="sl-btn" onClick={() => onWithdraw(e.id)}>Отозвать</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function formatDateTime(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
   return d.toLocaleString();
 }
-function escapeHtml(s?: string) {
-  return (s ?? "").replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-}
-/** Быстрый маршрут: во внешних Яндекс.Картах */
+
 function openRouteExternal(from?: [number, number], to?: [number, number]) {
   if (!to) return;
-  const rtext = from
-    ? `${from[1]},${from[0]}~${to[1]},${to[0]}`
-    : `~${to[1]},${to[0]}`;
+  const rtext = from ? `${from[1]},${from[0]}~${to[1]},${to[0]}` : `~${to[1]},${to[0]}`;
   window.open(`https://yandex.ru/maps/?rtext=${encodeURIComponent(rtext)}&rtt=pd`, "_blank");
-}
-
-/** Малые карточки в правой колонке */
-function Card({ title, children }: { title: string, children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl bg-white/95 p-3 shadow">
-      <div className="mb-2 text-sm font-semibold text-gray-700">{title}</div>
-      <div className="flex flex-col gap-2">{children}</div>
-    </div>
-  );
-}
-function MiniItem({ title, meta }: { title: string; meta: string }) {
-  return (
-    <div className="rounded-lg border px-3 py-2">
-      <div className="text-sm font-medium">{title}</div>
-      <div className="text-xs text-gray-500">{meta}</div>
-    </div>
-  );
 }

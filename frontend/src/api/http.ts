@@ -41,16 +41,12 @@ let isRefreshing = false;
 let waiters: Array<(t: string | null) => void> = [];
 
 async function callRefresh(): Promise<string> {
-  // Бэк возвращает { token } на POST /auth/refresh, cookie уйдет сама
-  const { data } = await axios.post(
-    `${API_URL}/auth/refresh`,
-    {},
-    { withCredentials: true }
-  );
-  const newToken: string = data.token;
+  const { data } = await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
+  const newToken: string = data?.accessToken ?? data?.token;
   setAccessToken(newToken);
   return newToken;
 }
+
 
 http.interceptors.response.use(
   (r) => r,

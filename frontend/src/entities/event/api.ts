@@ -1,55 +1,111 @@
 import { http } from "@/api/http";
 import type { Event, Page, EventQuery, Bbox } from "./types";
 
-function normEvent(e: any): Event {
+/** Нормализация Event под контракт Swagger */
+function toEvent(e: any): Event {
   return {
     id: String(e.id),
-    kind: e.kind ?? "TRAINING",
+    kind: e.kind,                              // "TRAINING" | "EVENT"
     title: e.title,
     sport: e.sport,
     description: e.description ?? null,
-    startsAt: e.startsAt ?? e.startAt,
-    durationMin: e.durationMin ?? e.duration ?? 60,
-    capacity: e.capacity ?? 0,
-    waitlistEnabled: Boolean(e.waitlistEnabled ?? e.waitlist_enabled ?? false),
-    access: e.access ?? "PUBLIC",
-    admission: e.admission ?? "OPEN",
+    startsAt: e.startsAt,                      // ISO
+    durationMin: e.durationMin,
+    capacity: e.capacity ?? undefined,
+    waitlistEnabled: e.waitlistEnabled ?? undefined,
+    access: e.access,                          // "PUBLIC" | "CLUB_ONLY"
+    admission: e.admission,                    // "AUTO" | "MANUAL"
     recurrenceRule: e.recurrenceRule ?? null,
     registrationDeadline: e.registrationDeadline ?? null,
-    organizerId: String(e.organizerId ?? e.organizer_id ?? ""),
+    organizerId: String(e.organizerId),
     clubId: e.clubId ?? null,
-    status: e.status ?? "PUBLISHED",
-    locationLat: e.locationLat ?? e.lat ?? e.location?.lat ?? null,
-    locationLon: e.locationLon ?? e.lon ?? e.location?.lon ?? null,
-    createdAt: e.createdAt ?? null,
-    updatedAt: e.updatedAt ?? null,
+    status: e.status,                          // "DRAFT" | "PUBLISHED" | "CANCELLED"
+    locationLat: e.locationLat ?? null,
+    locationLon: e.locationLon ?? null,
   };
 }
 
-export async function searchEvents(params: EventQuery): Promise<Page<Event>> {
-  const { data } = await http.get("/event", { params });
-
-  if (Array.isArray(data)) {
-    const content = data.map(normEvent);
-    return { content, totalElements: content.length, totalPages: 1, size: content.length, number: 0 };
-  }
-
-  const content = (data.content ?? data.items ?? []).map(normEvent);
+/** Нормализация Page<Event> под Swagger EventPage */
+function toPage(p: any): Page<Event> {
+  const content = (p?.content ?? []).map(toEvent);
   return {
     content,
-    totalElements: data.totalElements ?? data.total ?? content.length,
-    totalPages: data.totalPages ?? 1,
-    size: data.size ?? content.length,
-    number: data.number ?? data.page ?? 0,
+    page: p?.page ?? 0,
+    size: p?.size ?? content.length,
+    totalElements: p?.totalElements ?? content.length,
+    totalPages: p?.totalPages ?? 1,
+    last: p?.last ?? true,
   };
 }
 
+/** Поиск событий (пагинация и фильтры) */
+export async function searchEvents(params: EventQuery): Promise<Page<Event>> {
+  const { data } = await http.get("/event", { params });
+  // На всякий случай поддержим массив (хотя Swagger обещает page-объект)
+  if (Array.isArray(data)) {
+    const content = data.map(toEvent);
+    return {
+      content,
+      page: 0,
+      size: content.length,
+      totalElements: content.length,
+      totalPages: 1,
+      last: true,
+    };
+  }
+  return toPage(data);
+}
+
+/** Детали события */
+export async function getEvent(id: string): Promise<Event> {
+  const { data } = await http.get(`/event/${id}`);
+  return toEvent(data);
+}
+
+/** Создать событие (согласно EventCreateRequest) */
+export async function createEvent(payload: {
+  kind: Event["kind"];
+  title: string;
+  sport: string;
+  startsAt: string;
+  access: Event["access"];
+  admission: Event["admission"];
+  organizerId: string;
+  description?: string;
+  durationMin?: number;
+  capacity?: number;
+  waitlistEnabled?: boolean;
+  recurrenceRule?: string;
+  registrationDeadline?: string;
+  clubId?: string;
+  locationLat?: number;
+  locationLon?: number;
+}): Promise<Event> {
+  const { data } = await http.post("/event", payload);
+  return toEvent(data);
+}
+
+/** Частичное обновление события */
+export async function updateEvent(id: string, patch: Partial<Event>): Promise<Event> {
+  const { data } = await http.patch(`/event/${id}`, patch);
+  return toEvent(data);
+}
+
+/** Публикация / Отмена события */
+export async function publishEvent(id: string): Promise<void> {
+  await http.post(`/event/${id}/publish`, {});
+}
+export async function cancelEvent(id: string): Promise<void> {
+  await http.post(`/event/${id}/cancel`, {});
+}
+
+/** Фильтрация по BBOX (клиентская, если бэк не умеет bbox) */
 export function filterByBbox(events: Event[], bbox: Bbox): Event[] {
   const { swLat, swLon, neLat, neLon } = bbox;
   return events.filter(
     (e) =>
-      e.locationLat !== null &&
-      e.locationLon !== null &&
+      e.locationLat != null &&
+      e.locationLon != null &&
       e.locationLat >= swLat &&
       e.locationLat <= neLat &&
       e.locationLon >= swLon &&
@@ -57,6 +113,7 @@ export function filterByBbox(events: Event[], bbox: Bbox): Event[] {
   );
 }
 
+/** Загрузка под вьюпорт (через обычный /event + client-side bbox) */
 export async function fetchEventsForViewport(
   bbox: Bbox,
   time?: { from?: string; to?: string },
@@ -67,18 +124,20 @@ export async function fetchEventsForViewport(
     page: 0,
     from: time?.from,
     to: time?.to,
-    status: "PUBLISHED",
   });
   return filterByBbox(page.content, bbox);
 }
 
+/**
+ * Если на бэке добавлен bbox-фильтр (/event?minLat&minLon&maxLat&maxLon),
+ * используем его, иначе — фолбэк на client-side фильтрацию.
+ */
 export async function fetchEventsByBbox(
   bbox: Bbox,
   time?: { from?: string; to?: string },
   size = 500
 ): Promise<Event[]> {
   try {
-    // если на бэке уже есть /event?minLat=...&minLon=...&maxLat=...&maxLon=...
     const { data } = await http.get("/event", {
       params: {
         minLat: bbox.swLat,
@@ -89,20 +148,16 @@ export async function fetchEventsByBbox(
         to: time?.to,
         size,
         page: 0,
-        status: "PUBLISHED",
       },
     });
-
     const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
-    return arr.map(normEvent);
+    return arr.map(toEvent);
   } catch {
-    // фолбэк на текущую реализацию
     const page = await searchEvents({
       size,
       page: 0,
       from: time?.from,
       to: time?.to,
-      status: "PUBLISHED",
     });
     return filterByBbox(page.content, bbox);
   }

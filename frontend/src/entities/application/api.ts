@@ -1,43 +1,63 @@
+// src/entities/application/api.ts
 import { http } from "@/api/http";
-import type { Event } from "@/entities/event/types";
+import type { Application, ApplicationStatus, Page } from "./types";
 
-// если бек отдаёт application с вложенным event – достанем его;
-// если сразу Event – просто вернём как есть
-function asEvent(x:any): Event {
-  const e = x?.event ?? x;
+function norm(a: any): Application {
   return {
-    id: String(e.id),
-    kind: e.kind ?? "TRAINING",
-    title: e.title,
-    sport: e.sport,
-    description: e.description ?? null,
-    startsAt: e.startsAt ?? e.startAt,
-    durationMin: e.durationMin ?? e.duration ?? 60,
-    capacity: e.capacity ?? 0,
-    waitlistEnabled: Boolean(e.waitlistEnabled ?? e.waitlist_enabled ?? false),
-    access: e.access ?? "PUBLIC",
-    admission: e.admission ?? "OPEN",
-    recurrenceRule: e.recurrenceRule ?? null,
-    registrationDeadline: e.registrationDeadline ?? null,
-    organizerId: String(e.organizerId ?? e.organizer_id ?? ""),
-    clubId: e.clubId ?? null,
-    status: e.status ?? "PUBLISHED",
-    locationLat: e.locationLat ?? e.lat ?? e.location?.lat ?? null,
-    locationLon: e.locationLon ?? e.lon ?? e.location?.lon ?? null,
-    createdAt: e.createdAt ?? null,
-    updatedAt: e.updatedAt ?? null,
+    id: String(a.id),
+    eventId: String(a.eventId ?? a.event_id),
+    userId: String(a.userId ?? a.user_id),
+    status: (a.status ?? "PENDING") as ApplicationStatus,
+    createdAt: a.createdAt ?? a.created_at ?? undefined,
   };
 }
 
-export async function myConfirmedEvents(fromISO = new Date().toISOString(), limit = 50): Promise<Event[]> {
-  const { data } = await http.get("/application/my", { params: { status: "CONFIRMED", from: fromISO, limit } });
-  const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
-  return arr.map(asEvent);
+// === ИМЕНОВАННЫЕ ЭКСПОРТЫ ===
+
+export async function apply(eventId: string): Promise<Application> {
+  const { data } = await http.post("/application", { eventId });
+  return norm(data);
 }
 
-// подгони URL под свой бек (если у тебя другой путь)
-export async function applyToEvent(eventId: string) {
-  // вариант А: POST /application {eventId}
-  const { data } = await http.post("/application", { eventId });
-  return data;
+export async function withdraw(applicationId: string): Promise<void | Application> {
+  const { data } = await http.post(`/application/${applicationId}/withdraw`);
+  return data ? norm(data) : undefined;
+}
+
+export async function confirm(applicationId: string): Promise<Application> {
+  const { data } = await http.post(`/application/${applicationId}/confirm`);
+  return norm(data);
+}
+
+export async function decline(applicationId: string): Promise<Application> {
+  const { data } = await http.post(`/application/${applicationId}/decline`);
+  return norm(data);
+}
+
+export async function myApplications(page = 0, size = 20): Promise<Page<Application>> {
+  const { data } = await http.get("/application/my", { params: { page, size } });
+  const content = (data?.content ?? data?.items ?? []).map(norm);
+  return {
+    content,
+    totalElements: data?.totalElements ?? content.length,
+    totalPages: data?.totalPages ?? 1,
+    size: data?.size ?? content.length,
+    number: data?.number ?? data?.page ?? 0,
+  };
+}
+
+export async function applicationsByEvent(
+  eventId: string,
+  page = 0,
+  size = 20
+): Promise<Page<Application>> {
+  const { data } = await http.get(`/application/by-event/${eventId}`, { params: { page, size } });
+  const content = (data?.content ?? data?.items ?? []).map(norm);
+  return {
+    content,
+    totalElements: data?.totalElements ?? content.length,
+    totalPages: data?.totalPages ?? 1,
+    size: data?.size ?? content.length,
+    number: data?.number ?? data?.page ?? 0,
+  };
 }

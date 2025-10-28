@@ -1,65 +1,106 @@
+// src/entities/application/store.ts
 import { create } from "zustand";
-import type { Application } from "./types";
-import type { Event } from "../event/types";
-import { myApplications, applyToEvent, withdrawApplication } from "./api";
+import type { Application, ApplicationStatus, Page } from "./types";
+import { apply as apiApply, withdraw as apiWithdraw, myApplications } from "./api";
+import { http } from "@/api/http";
+import type { Event } from "@/entities/event/types";
 
-const MAX_ACTIVE = 3;
-
-function startMs(e: Event) { return new Date(e.startsAt).getTime(); }
-function endMs(e: Event) { return startMs(e) + (e.durationMin ?? 60) * 60000; }
-function isFuture(e: Event) { return endMs(e) > Date.now(); }
-function overlap(a: Event, b: Event) {
-  return startMs(a) < endMs(b) && startMs(b) < endMs(a);
+// Нормализация Event (минимум полей, которых достаточно для UI)
+function normEvent(e: any): Event {
+  return {
+    id: String(e.id),
+    kind: e.kind ?? "TRAINING",
+    title: e.title,
+    sport: e.sport,
+    description: e.description ?? null,
+    startsAt: e.startsAt ?? e.startAt,
+    durationMin: e.durationMin ?? e.duration ?? 60,
+    capacity: e.capacity ?? 0,
+    waitlistEnabled: Boolean(e.waitlistEnabled ?? e.waitlist_enabled ?? false),
+    access: e.access ?? "PUBLIC",
+    admission: e.admission ?? "AUTO",
+    recurrenceRule: e.recurrenceRule ?? null,
+    registrationDeadline: e.registrationDeadline ?? null,
+    organizerId: String(e.organizerId ?? e.organizer_id ?? ""),
+    clubId: e.clubId ?? null,
+    status: e.status ?? "PUBLISHED",
+    locationLat: e.locationLat ?? e.lat ?? e.location?.lat ?? null,
+    locationLon: e.locationLon ?? e.lon ?? e.location?.lon ?? null,
+    createdAt: e.createdAt ?? null,
+    updatedAt: e.updatedAt ?? null,
+  };
 }
 
-type AppState = {
-  list: Application[];
+// Подтянуть детали события по id
+async function fetchEventById(id: string): Promise<Event | null> {
+  try {
+    const { data } = await http.get(`/event/${id}`);
+    return normEvent(data);
+  } catch {
+    return null;
+  }
+}
+
+type AppWithEvent = Application & { event?: Event | null };
+
+type ApplicationState = {
+  mine: AppWithEvent[];
   loading: boolean;
-  loadMine: () => Promise<void>;
+  error: string | null;
 
-  // проверка: можно ли записаться (нужен список моих будущих событий)
-  canJoin: (candidate: Event, myFutureEvents: Event[]) => { ok: true } | { ok: false, reason: string };
-
-  apply: (ev: Event, myFutureEvents: Event[]) => Promise<void>;
-  withdraw: (applicationId: string) => Promise<void>;
+  loadMine: (page?: number, size?: number) => Promise<void>;
+  apply: (ev: Event) => Promise<void>;
+  withdrawByEvent: (eventId: string) => Promise<void>;
+  findByEventId: (eventId: string) => AppWithEvent | undefined;
 };
 
-export const useApplicationStore = create<AppState>((set, get) => ({
-  list: [],
+export const useApplicationStore = create<ApplicationState>((set, get) => ({
+  mine: [],
   loading: false,
+  error: null,
 
-  loadMine: async () => {
-    set({ loading: true });
+  // Мои заявки (подтягиваем события для удобства UI)
+  loadMine: async (page = 0, size = 50) => {
+    set({ loading: true, error: null });
     try {
-      const list = await myApplications();
-      set({ list, loading: false });
-    } catch {
-      set({ loading: false });
+      const resp: Page<Application> = await myApplications(page, size);
+      const apps = resp.content;
+
+      // Загружаем события параллельно (не страшно 10–50 штук)
+      const enriched = await Promise.all(
+        apps.map(async (a) => {
+          const ev = await fetchEventById(a.eventId);
+          return { ...a, event: ev } as AppWithEvent;
+        })
+      );
+
+      set({ mine: enriched, loading: false });
+    } catch (e: any) {
+      set({ loading: false, error: e?.response?.data?.message || "Не удалось загрузить заявки" });
     }
   },
 
-  canJoin: (candidate, myFutureEvents) => {
-    const mine = myFutureEvents.filter(isFuture);
+  // Подача заявки по объекту события (как в MapPage)
+  apply: async (ev: Event) => {
+    // не дублируем активные
+    const existing = get().mine.find(
+      (m) => m.eventId === ev.id && (m.status === "PENDING" || m.status === "CONFIRMED")
+    );
+    if (existing) return;
 
-    if (mine.length >= MAX_ACTIVE) {
-      return { ok: false, reason: `Максимум ${MAX_ACTIVE} активных тренировок` };
-    }
-    if (mine.some((e) => overlap(e, candidate))) {
-      return { ok: false, reason: "Пересечение по времени с уже активной тренировкой" };
-    }
-    return { ok: true };
+    const a = await apiApply(ev.id);
+    set({ mine: [{ ...a, event: ev }, ...get().mine] });
   },
 
-  apply: async (ev, myFutureEvents) => {
-    const check = get().canJoin(ev, myFutureEvents);
-    if (!check.ok) throw new Error(check.reason);
-    await applyToEvent(ev.id);
-    // обновим мои заявки
-    await get().loadMine();
+  // Отозвать по eventId (находим заявку, шлём withdraw по её id)
+  withdrawByEvent: async (eventId: string) => {
+    const app = get().mine.find((m) => m.eventId === eventId);
+    if (!app) return;
+
+    await apiWithdraw(app.id);
+    // Можно просто удалить заявку из списка:
+    set({ mine: get().mine.filter((m) => m.id !== app.id) });
   },
 
-  withdraw: async (applicationId) => {
-    await withdrawApplication(applicationId);
-    await get().loadMine();
-  },
+  findByEventId: (eventId: string) => get().mine.find((m) => m.eventId === eventId),
 }));
