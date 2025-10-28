@@ -71,3 +71,39 @@ export async function fetchEventsForViewport(
   });
   return filterByBbox(page.content, bbox);
 }
+
+export async function fetchEventsByBbox(
+  bbox: Bbox,
+  time?: { from?: string; to?: string },
+  size = 500
+): Promise<Event[]> {
+  try {
+    // если на бэке уже есть /event?minLat=...&minLon=...&maxLat=...&maxLon=...
+    const { data } = await http.get("/event", {
+      params: {
+        minLat: bbox.swLat,
+        minLon: bbox.swLon,
+        maxLat: bbox.neLat,
+        maxLon: bbox.neLon,
+        from: time?.from,
+        to: time?.to,
+        size,
+        page: 0,
+        status: "PUBLISHED",
+      },
+    });
+
+    const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
+    return arr.map(normEvent);
+  } catch {
+    // фолбэк на текущую реализацию
+    const page = await searchEvents({
+      size,
+      page: 0,
+      from: time?.from,
+      to: time?.to,
+      status: "PUBLISHED",
+    });
+    return filterByBbox(page.content, bbox);
+  }
+}

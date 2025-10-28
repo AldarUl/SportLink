@@ -4,7 +4,8 @@ import * as ReactDOM from "react-dom"; // для reactify.bindTo
 import { loadYmaps3 } from "@/lib/loadYmaps3";
 import { useEventStore } from "@/entities/event/store";
 import type { Event as AppEvent } from "@/entities/event/types";
-
+import { myConfirmedEvents, applyToEvent } from "@/entities/application/api";
+import { willOverlapWithAny } from "@/shared/schedule";
 
 
 
@@ -126,36 +127,54 @@ function PopupContent({
   myPos: [number, number] | null;
   coords: [number, number];
 }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function onJoin() {
+    setErr(null); setMsg(null); setBusy(true);
+    try {
+      // 1) мои подтверждённые будущие тренировки
+      const confirmed = await myConfirmedEvents();
+
+      // 2) проверка пересечения
+      if (willOverlapWithAny(e, confirmed)) {
+        setErr("У вас уже есть подтверждённая тренировка в это время.");
+        return;
+      }
+
+      // 3) отправка заявки
+      await applyToEvent(e.id);
+      setMsg("Заявка отправлена");
+    } catch (ex:any) {
+      setErr(ex?.response?.data?.message ?? "Не удалось подать заявку");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div style={{ minWidth: 240 }}>
       <div style={{ fontWeight: 600 }}>{e.title}</div>
       <div style={{ fontSize: 12, color: "#64748b", margin: "4px 0" }}>
         {(e.kind === "TRAINING" ? "Тренировка" : "Событие") +
-          " • " +
-          (e.sport ?? "") +
-          " • " +
-          formatDateTime(e.startsAt)}
+          " • " + (e.sport ?? "") + " • " + formatDateTime(e.startsAt)}
       </div>
-      <div style={{ fontSize: 13, lineHeight: 1.3 }}>
-        {e.description ?? ""}
-      </div>
+      {e.description && <div style={{ fontSize: 13, lineHeight: 1.3 }}>{e.description}</div>}
+      {err && <div style={{ marginTop: 8, fontSize: 12, color: "#b91c1c" }}>{err}</div>}
+      {msg && <div style={{ marginTop: 8, fontSize: 12, color: "#065f46" }}>{msg}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-        <button
-          className="sl-btn"
-          onClick={() => openRouteExternal(myPos ?? undefined, coords)}
-        >
+        <button className="sl-btn" onClick={() => openRouteExternal(myPos ?? undefined, coords)}>
           Маршрут
         </button>
-        <button
-          className="sl-btn sl-btn--primary"
-          onClick={() => console.log("join", e.id)}
-        >
-          Записаться
+        <button className="sl-btn sl-btn--primary" disabled={busy} onClick={onJoin}>
+          {busy ? "Отправляем…" : "Записаться"}
         </button>
       </div>
     </div>
   );
 }
+
 
   // === МАРКЕРЫ ===
   const markers = useMemo(

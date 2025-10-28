@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Event, Bbox as ApiBbox } from "./types";
-import { fetchEventsForViewport } from "./api";
+import { fetchEventsByBbox } from "./api"; // ← вместо fetchEventsForViewport
 
 // Внешний BBox, который приходит из MapPage
 type ViewportBbox = { minLat: number; minLon: number; maxLat: number; maxLon: number };
@@ -19,24 +19,19 @@ export const useEventStore = create<EventState>((set) => ({
 
   clear: () => set({ events: [] }),
 
-  seed: () =>
-    set({
-      events: DEMO,
-    }),
+  seed: () => set({ events: DEMO }),
 
   fetchViewport: async (b) => {
     set({ fetching: true });
     try {
       const bbox: ApiBbox = {
-        swLat: b.minLat,
-        swLon: b.minLon,
-        neLat: b.maxLat,
-        neLon: b.maxLon,
+        swLat: b.minLat, swLon: b.minLon,
+        neLat: b.maxLat, neLon: b.maxLon,
       };
-      const data = await fetchEventsForViewport(bbox);
+      const data = await fetchEventsByBbox(bbox);  // ← тут
       set({ events: data, fetching: false });
     } catch (e) {
-      console.warn("fetchEventsForViewport failed, fallback to DEMO", e);
+      console.warn("fetchEventsByBbox failed, fallback to DEMO", e);
       set({ events: DEMO, fetching: false });
     }
   },
