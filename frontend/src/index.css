@@ -41,3 +41,35 @@ html, body, #root { height: 100%; margin: 0; }
   0%   { box-shadow: 0 0 0 0 rgba(37,99,235,.35), 0 8px 20px rgba(0,0,0,.3); }
   100% { box-shadow: 0 0 0 14px rgba(37,99,235,0), 0 8px 20px rgba(0,0,0,.3); }
 }
+
+/* --- Маленькая подпись у маркера --- */
+.sl-badge {
+  position: absolute;
+  left: 32px;           /* отступ вправо от пина */
+  top: -8px;
+  max-width: 240px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 6px 18px rgba(0,0,0,.15);
+  border: 1px solid rgba(0,0,0,.06);
+  pointer-events: auto;
+}
+
+.sl-badge__title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sl-badge__sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

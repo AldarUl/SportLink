@@ -1,6 +1,7 @@
 // src/pages/MapPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as ReactDOM from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { loadYmaps3 } from "@/lib/loadYmaps3";
 import { useEventStore } from "@/entities/event/store";
 import type { Event as AppEvent } from "@/entities/event/types";
@@ -10,6 +11,7 @@ import { willOverlapWithAny } from "@/shared/schedule";
 type LngLat = [number, number];
 
 export default function MapPage() {
+  const navigate = useNavigate();
   const { events } = useEventStore();
 
   const [apiReady, setApiReady] = useState(false);
@@ -25,6 +27,7 @@ export default function MapPage() {
   const [geoError, setGeoError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<{ e: AppEvent; coords: LngLat } | null>(null);
+  const [zoom, setZoom] = useState<number>(12); // актуальный зум для показа мини-лейбла
 
   // --- Yandex Maps v3 + reactify ---
   useEffect(() => {
@@ -73,6 +76,7 @@ export default function MapPage() {
         const lngLat: LngLat = [pos.coords.longitude, pos.coords.latitude];
         setMyPos(lngLat);
         setLocation({ center: lngLat, zoom: 15 });
+        setZoom(15);
       },
       (err) => {
         window.clearTimeout(timer);
@@ -121,7 +125,6 @@ export default function MapPage() {
     }
   };
 
-  // --- Data for markers ---
   const markers = useMemo(
     () => (events as AppEvent[]).filter(e => e.locationLat != null && e.locationLon != null),
     [events]
@@ -163,49 +166,61 @@ export default function MapPage() {
 
         <YMapListener
           onUpdate={(e: any) => {
-            if (e?.location?.zoom < 11) return;
-            const b = e?.location?.bounds;
-            if (b) handleBounds(b);
+            if (e?.location?.zoom) setZoom(e.location.zoom);
+            if (e?.location?.zoom >= 11) {
+              const b = e?.location?.bounds;
+              if (b) handleBounds(b);
+            }
           }}
-          onClick={() => setSelected(null)} // клик по карте — закрыть попап
+          onClick={() => setSelected(null)}
         />
 
-        {/* мой маркер */}
+        {/* Я */}
         {myPos && (
           <YMapMarker coordinates={myPos} zIndex={1000}>
             <div className="sl-pin sl-pin--user" title="Вы здесь" />
           </YMapMarker>
         )}
 
-        {/* события / тренировки */}
+        {/* События/тренировки */}
         {markers.map((e) => {
           const coords: LngLat = [e.locationLon as number, e.locationLat as number];
           const isTraining = (e.kind || "EVENT").toUpperCase() === "TRAINING";
           const hasApp = Boolean(findByEventId(e.id));
           const active = selected?.e.id === e.id;
+          const showMini = active || zoom >= 13;
+
+          const title = e.title;
+          const subtitle = `${e.kind === "TRAINING" ? "Тренировка" : "Событие"} • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
 
           return (
             <React.Fragment key={e.id}>
+              {/* сам пин */}
               <YMapMarker coordinates={coords} zIndex={active ? 1500 : 500}>
                 <div
                   className={`sl-pin ${isTraining ? "sl-pin--training" : "sl-pin--event"} ${active ? "sl-pin--active" : ""}`}
-                  title={`${e.title} • ${(e.kind === "TRAINING" ? "Тренировка" : "Событие")}`}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    setSelected({ e, coords });
-                  }}
+                  title={title}
+                  onClick={(ev) => { ev.stopPropagation(); setSelected({ e, coords }); }}
                 />
+                {/* мини-плашка рядом (как у дефолтного маркера) */}
+                {showMini && (
+                  <div
+                    className="sl-badge"
+                    onClick={(ev) => { ev.stopPropagation(); setSelected({ e, coords }); }}
+                  >
+                    <div className="sl-badge__title">{title}</div>
+                    <div className="sl-badge__sub">{subtitle}</div>
+                  </div>
+                )}
               </YMapMarker>
 
-              {/* попап-«балун» */}
+              {/* раскрытый попап */}
               {active && (
                 <YMapMarker coordinates={coords} zIndex={2000}>
                   <div
                     className="pointer-events-auto"
                     onClick={(ev) => ev.stopPropagation()}
-                    style={{
-                      transform: "translate(20px, -10px)", // смещение вправо-вверх от пина
-                    }}
+                    style={{ transform: "translate(20px, -10px)" }}
                   >
                     <PopupCard
                       e={e}
@@ -215,6 +230,7 @@ export default function MapPage() {
                       onApply={handleApply}
                       onWithdraw={(eventId) => withdrawByEvent(eventId)}
                       onClose={() => setSelected(null)}
+                      onMore={() => navigate(`/event/${e.id}`)} // роут «Подробнее»
                     />
                   </div>
                 </YMapMarker>
@@ -224,7 +240,7 @@ export default function MapPage() {
         })}
       </YMap>
 
-      {/* Bottom-sheet (как было) */}
+      {/* Bottom-sheet кратко оставляю как есть */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 mx-auto w-[min(960px,95%)]">
         <div className="pointer-events-auto rounded-2xl bg-white/95 p-3 shadow-xl">
           <div className="mb-2 text-sm font-semibold text-gray-700">Мои ближайшие тренировки</div>
@@ -270,9 +286,8 @@ export default function MapPage() {
   );
 }
 
-// ---------- Вспомогательные компоненты/утилиты ----------
 function PopupCard({
-  e, myPos, coords, hasApp, onApply, onWithdraw, onClose,
+  e, myPos, coords, hasApp, onApply, onWithdraw, onClose, onMore,
 }: {
   e: AppEvent;
   myPos: [number, number] | null;
@@ -281,6 +296,7 @@ function PopupCard({
   onApply: (e: AppEvent) => void;
   onWithdraw: (eventId: string) => void;
   onClose: () => void;
+  onMore: () => void;
 }) {
   return (
     <div className="relative w-72 rounded-xl bg-white p-3 shadow-xl">
@@ -303,6 +319,7 @@ function PopupCard({
         ) : (
           <button className="sl-btn" onClick={() => onWithdraw(e.id)}>Отозвать</button>
         )}
+        <button className="sl-btn" onClick={onMore}>Подробнее</button>
       </div>
     </div>
   );
