@@ -1,2 +1,43 @@
 @import "tailwindcss";
+
 html, body, #root { height: 100%; margin: 0; }
+
+/* --- SportLink Map Pins --- */
+.sl-pin {
+  position: relative;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  /* якорение делаем в шаблоне layout, НЕ через transform */
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* «хвостик» пина */
+.sl-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%; bottom: -8px;
+  width: 12px; height: 12px;
+  transform: translate(-50%, 0) rotate(45deg);
+  background: currentColor;
+  border-bottom: 3px solid #fff;
+  border-right: 3px solid #fff;
+  border-bottom-right-radius: 2px;
+}
+
+/* Варианты */
+.sl-pin--user     { color:#2563eb; background: currentColor; }
+.sl-pin--training { color:#0ea5e9; background: currentColor; }
+.sl-pin--event    { color:#ef4444; background: currentColor; width:32px; height:32px; }
+
+/* Активный (по клику) — лёгкий «пульс» */
+.sl-pin--active { animation: sl-pulse 1200ms ease-out infinite; }
+
+@keyframes sl-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(37,99,235,.35), 0 8px 20px rgba(0,0,0,.3); }
+  100% { box-shadow: 0 0 0 14px rgba(37,99,235,0), 0 8px 20px rgba(0,0,0,.3); }
+}
