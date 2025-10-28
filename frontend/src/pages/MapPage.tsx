@@ -212,10 +212,11 @@ function PopupContent({
         {/* Слушаем обновления камеры: при первом рендере тоже приходит */}
         <YMapListener
           // e.location.bounds — текущие границы вьюпорта (в координатах карты)
-          onUpdate={(e: any) => {
-            const b = e?.location?.bounds;
-            if (b) handleBounds(b);
-          }}
+        onUpdate={(e:any) => {
+          if (e?.location?.zoom < 11) return;
+          const b = e?.location?.bounds;
+          if (b) handleBounds(b);
+        }}
         />
 
         {/* Мой маркер */}

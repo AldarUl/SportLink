@@ -1,6 +1,8 @@
+// src/pages/RegisterPage.tsx
 import { FormEvent, useState } from "react";
-import { register } from "@/features/auth/api";
+import { register, login, fetchMe } from "@/features/auth/api"; // ← ДОБАВИЛИ login и fetchMe
 import { Link, useNavigate } from "react-router-dom";
+
 
 export default function RegisterPage() {
   const nav = useNavigate();
@@ -20,9 +22,13 @@ export default function RegisterPage() {
         email: email.trim(),
         password,
       });
-      nav("/auth/login");
+      await login(email.trim(), password);
+      await fetchMe();
+      nav("/map", { replace: true });
+
     } catch (e: any) {
       // бэкенд может прислать message или массив errors
+        console.error("Registration flow failed:", e); // ← видно будет ReferenceError/TypeError
       const msg =
         e?.response?.data?.message ||
         (Array.isArray(e?.response?.data?.errors)
