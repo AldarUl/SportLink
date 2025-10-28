@@ -1,9 +1,13 @@
 // src/pages/MapPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as ReactDOM from "react-dom"; // 👈 ВАЖНО: нужен react-dom
+import * as ReactDOM from "react-dom"; // для reactify.bindTo
 import { loadYmaps3 } from "@/lib/loadYmaps3";
 import { useEventStore } from "@/entities/event/store";
 import type { Event as AppEvent } from "@/entities/event/types";
+
+
+
+
 
 // ВАЖНО для v3: порядок координат [lng, lat]
 type LngLat = [number, number];
@@ -231,8 +235,8 @@ function PopupContent({
           </YMapMarker>
         )}
 
-        {/* События/тренировки */}
-        {markers.map((e) => {
+{/* События/тренировки */}
+{markers.map((e) => {
   const coords: LngLat = [e.locationLon as number, e.locationLat as number];
   const color =
     (e.kind || "EVENT").toUpperCase() === "TRAINING" ? "lightblue" : "orange";
@@ -252,6 +256,7 @@ function PopupContent({
     />
   );
 })}
+
 
       </YMap>
 
