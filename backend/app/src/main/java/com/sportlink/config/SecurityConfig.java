@@ -66,7 +66,15 @@ public class SecurityConfig {
                     ).permitAll();
 
                     // Публичная аутентификация/регистрация
-                    auth.requestMatchers("/api/v1/auth/**").permitAll();
+                    auth.requestMatchers(
+                            "/api/v1/auth/login",
+                            "/api/v1/auth/refresh",
+                            "/api/v1/auth/logout"
+                    ).permitAll();
+                    auth.requestMatchers("/api/v1/auth/me").authenticated();
+
+
+
                     auth.requestMatchers(HttpMethod.POST, "/api/v1/user").permitAll();
 
                     // Публичное чтение каталога/поиска/событий/профилей

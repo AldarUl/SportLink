@@ -28,5 +28,12 @@ management:
 
 security:
   jwt:
-    secret: ${SECURITY_JWT_SECRET:dev-secret}
-    expirationMs: ${SECURITY_JWT_EXPIRATIONMS:86400000}
+    secret: ${SECURITY_JWT_SECRET:dev-secret-should-be-very-long}
+    accessTtlMinutes: 15
+    refreshTtlDays: 30
+    issuer: sportlink
+  refreshCookie:
+    name: refreshToken
+    path: /api/v1/auth/refresh
+    sameSite: Strict
+    secure: true

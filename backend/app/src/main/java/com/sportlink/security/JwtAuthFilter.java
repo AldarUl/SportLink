@@ -1,5 +1,6 @@
 package com.sportlink.security;
 
+import com.sportlink.auth.service.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
