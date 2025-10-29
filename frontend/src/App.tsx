@@ -1,10 +1,11 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
+import { useAuthStore } from "@/features/auth/store";
+import { logout } from "@/features/auth/api";
 import ProtectedRoute from "@/shared/ProtectedRoute";
 import MapPage from "@/pages/map/MapPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
-import { useAuthStore } from "@/features/auth/store";
-import { logout } from "@/features/auth/api";
+import EventCreatePage from "@/pages/EventCreatePage";
 
 function Nav() {
   const { user, accessToken } = useAuthStore();
@@ -51,6 +52,9 @@ export default function App() {
           <Route path="/auth/login" element={<LoginPage />} />
           <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="*" element={<Navigate to="/map" replace />} />
+
+          <Route path="/event/new" element={<EventCreatePage />} />
+        
         </Routes>
       </div>
     </div>

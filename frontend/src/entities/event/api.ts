@@ -162,8 +162,8 @@ export async function fetchEventsByBbox(
     });
     return filterByBbox(page.content, bbox);
   }
+}
 
-  export async function deleteEvent(id: string): Promise<void> {
-    await http.delete(`/event/${id}`);
-  }
+export async function deleteEvent(id: string): Promise<void> {
+  await http.delete(`/event/${id}`);
 }
