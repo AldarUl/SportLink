@@ -103,4 +103,11 @@ public class EventController {
     public void publish(@PathVariable UUID id, Authentication auth) {
         eventService.publish(id, currentUserId(auth));
     }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Удалить событие (организатор)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/{id}")
+    public void delete(@PathVariable UUID id, Authentication auth) {
+        eventService.delete(id, currentUserId(auth));
+    }
 }

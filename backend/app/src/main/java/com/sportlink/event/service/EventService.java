@@ -32,4 +32,6 @@ public interface EventService {
     void publish(UUID id, UUID currentUserId);
 
     boolean hasFreeCapacity(UUID eventId);
+
+    void delete(UUID id, UUID currentUserId);
 }

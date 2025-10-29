@@ -210,4 +210,16 @@ public class EventServiceImpl implements EventService {
                 e.getOrganizerId(), e.getClubId(), e.getLocationLat(), e.getLocationLon(), e.getStatus()
         );
     }
+
+    @Override
+    public void delete(UUID id, UUID currentUserId) {
+        Event e = eventRepository.findById(id)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found"));
+        requireOrganizer(e, currentUserId);
+
+        // запретить удаление начавшихся событий
+        // requireNotStarted(e);
+
+        eventRepository.deleteById(id);
+    }
 }
