@@ -1,4 +1,3 @@
-// src/pages/map/MapPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEventStore } from "@/entities/event/store";
@@ -21,8 +20,8 @@ import { TrainingMarker } from "./ui/markers/TrainingMarker";
 import "./styles/mapPins.css";
 
 // всплывающее меню создания на карте (ПКМ / long-press)
-// (импорт оставляем при необходимости, но в этом файле используем собственный div-попап)
 // import ContextCreateMenu from "./ui/balloons/ContextCreateMenu";
+import { CreateEventModal } from "./ui/modals/CreateEventModal";
 
 type ContextMenuState = { 
   coords: [number, number]; // [lon, lat]
@@ -46,7 +45,6 @@ export default function MapPage() {
   // состояние вьюпорта и подгрузка ивентов по bbox
   const { zoom, viewportDiagKm, zoomRef, onMapUpdate } = useViewport();
   const { handleBounds, cancel } = useViewportFetch(zoomRef, () => viewportDiagKm);
-  const lastBoundsRef = useRef<any>(null);
 
   // заявки/оверлап
   const { mine, loadMine, handleApply, withdrawByEvent, findByEventId } = useApplyWithOverlap();
@@ -61,10 +59,15 @@ export default function MapPage() {
   // контекстное меню для создания события/тренировки
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Кеш последних геокоординат ПКМ из YMapListener
-  const lastGeoRef = useRef<[number, number] | null>(null); // [lon, lat]
+  // кеш последних геокоординат ПКМ (если понадобится)
+  const lastGeoRef = useRef<[number, number] | null>(null);
+
+  // ------- МОДАЛКА СОЗДАНИЯ -------
+  const [createState, setCreateState] = useState<{
+    kind: "EVENT" | "TRAINING";
+    coords: LngLat; // [lon, lat]
+  } | null>(null);
 
   // безопасные обработчики (не дергают API, если аноним)
   const onApplySafe = async (ev: AppEvent) => {
@@ -82,14 +85,11 @@ export default function MapPage() {
     [events]
   );
 
-  // переход в форму создания с подстановкой координат (оставляем как у тебя)
+  // ==== БЫЛО: переход на страницу.
+  // ==== СТАЛО: открываем модалку с фиксированным типом и координатами точки.
   const openCreate = (kind: "EVENT" | "TRAINING", lat: number, lon: number) => {
-    const params = new URLSearchParams({
-      kind,
-      lat: String(lat),
-      lon: String(lon),
-    });
-    navigate(`/event/new?${params.toString()}`);
+    if (!isAuthed) { navigate("/auth/login"); return; }
+    setCreateState({ kind, coords: [lon, lat] }); // [lon, lat]
     setCtxMenu(null);
   };
 
@@ -101,23 +101,23 @@ export default function MapPage() {
     if (zoom < needed) setSelected(null);
   }, [zoom, selected]);
 
-  // === Обработчик ПКМ на контейнере карты (оставляем) ===
-  // Берём экранные координаты для позиционирования попапа,
-  // а геокоординаты — из lastGeoRef (которые установит YMapListener), иначе — центр.
+  // Обработчик ПКМ на контейнере карты (оставляем как у тебя)
   const handleContainerContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
     if (!containerRef.current) return;
     
+    // Получаем координаты клика относительно контейнера
     const rect = containerRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
+    
+    // Гео возьмём из последнего YMapListener, иначе центр (как было)
     const coords = lastGeoRef.current ?? [location.center[0], location.center[1]] as [number, number];
 
     setCtxMenu({
-      coords, // [lon, lat]
+      coords,
       screenX: x,
       screenY: y
     });
@@ -125,20 +125,14 @@ export default function MapPage() {
     setSelected(null);
   };
 
-  // Закрываем контекстное меню при ЛКМ вне меню
+  // Закрываем контекстное меню при клике в любое место
   useEffect(() => {
-    const handlePointerDown = (ev: PointerEvent) => {
-      if (ev.button !== 0) return; // только левая кнопка
-      if (!menuRef.current) return;
-      const path = ev.composedPath();
-      if (!path.includes(menuRef.current)) setCtxMenu(null);
+    const handleClickOutside = () => {
+      setCtxMenu(null);
     };
-    const onEsc = (ev: KeyboardEvent) => { if (ev.key === "Escape") setCtxMenu(null); };
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", onEsc);
+    document.addEventListener('click', handleClickOutside);
     return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", onEsc);
+      document.removeEventListener('click', handleClickOutside);
     };
   }, []);
 
@@ -156,7 +150,7 @@ export default function MapPage() {
     <div 
       ref={containerRef}
       className="relative h-full w-full"
-      onContextMenu={handleContainerContextMenu} // не удаляем — он даёт экранную позицию
+      onContextMenu={handleContainerContextMenu}
     >
       <GeoStatusOverlay pending={geoPending} error={geoError} />
 
@@ -170,10 +164,9 @@ export default function MapPage() {
         </button>
       </div>
 
-      {/* Контекстное меню (старый попап) */}
+      {/* Контекстное меню */}
       {ctxMenu && (
         <div 
-          ref={menuRef}
           className="absolute z-50 bg-white rounded-lg shadow-lg p-2 min-w-[160px]"
           style={{
             left: ctxMenu.screenX,
@@ -211,8 +204,6 @@ export default function MapPage() {
           onUpdate={(e: any) => {
             const loc = e?.location;
             onMapUpdate(loc);
-            if (loc?.bounds) lastBoundsRef.current = loc.bounds;
-
             if (loc?.zoom && loc.zoom >= Z_EVENTS_FETCH) {
               const b = loc?.bounds;
               if (b) handleBounds(b);
@@ -225,16 +216,15 @@ export default function MapPage() {
             setCtxMenu(null);
           }}
           onContextMenu={(e: any) => {
-            // Альтернативный обработчик ПКМ через YMapListener — достаём ТОЧНЫЕ гео
+            // Альтернативный обработчик ПКМ через YMapListener
             e?.originalEvent?.preventDefault?.();
-            const c = e?.coordinates; // [lon, lat]
+            const c = e?.coordinates;
             if (Array.isArray(c) && c.length === 2) {
-              lastGeoRef.current = c as [number, number]; // кеш гео
-
+              lastGeoRef.current = c as [number, number]; // кеш точных geo
               if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
                 setCtxMenu({
-                  coords: lastGeoRef.current,
+                  coords: c as [number, number],
                   screenX: e.originalEvent.clientX - rect.left,
                   screenY: e.originalEvent.clientY - rect.top
                 });
@@ -291,6 +281,17 @@ export default function MapPage() {
 
       {/* Bottom-sheet (показывается и анониму, просто без действий) */}
       <MyTrainingsSheet mine={mine} myPos={myPos} onWithdraw={onWithdrawSafe} />
+
+      {/* МОДАЛКА СОЗДАНИЯ: открывается из контекстного меню */}
+      {createState && (
+        <CreateEventModal
+          open
+          kind={createState.kind}
+          coords={createState.coords}
+          onClose={() => setCreateState(null)}
+          onCreated={() => setCreateState(null)}
+        />
+      )}
     </div>
   );
 }
