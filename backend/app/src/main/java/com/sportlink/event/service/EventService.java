@@ -17,12 +17,15 @@ public interface EventService {
     EventResponse get(UUID id, UUID viewerId);
     default EventResponse get(UUID id) { return get(id, null); }
 
-    // ← добавили clubId
-    EventPage search(EventKind kind, String sport,
-                     OffsetDateTime from, OffsetDateTime to,
-                     EventAccess access, EventAdmission admission,
-                     UUID clubId,
-                     int page, int size);
+    EventPage search(
+            EventKind kind, String sport,
+            OffsetDateTime from, OffsetDateTime to,
+            EventAccess access, EventAdmission admission,
+            java.util.UUID clubId,
+            Double minLat, Double minLon, Double maxLat, Double maxLon,
+            Double centerLat, Double centerLon,
+            int page, int size
+    );
 
     EventResponse update(UUID id, UUID currentUserId, EventUpdateRequest update);
     void cancel(UUID id, UUID currentUserId);

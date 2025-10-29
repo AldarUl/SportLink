@@ -5,11 +5,11 @@ import com.sportlink.event.model.EventAccess;
 import com.sportlink.event.model.EventAdmission;
 import com.sportlink.event.model.EventKind;
 import com.sportlink.event.service.EventService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import io.micrometer.core.annotation.Timed;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import io.micrometer.core.annotation.Timed;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -33,9 +33,22 @@ public class SearchFeedController {
             @RequestParam(required = false) EventAccess access,
             @RequestParam(required = false) EventAdmission admission,
             @RequestParam(required = false) UUID clubId,
+
+            // --- BBOX + optional center ---
+            @RequestParam(required = false) Double minLat,
+            @RequestParam(required = false) Double minLon,
+            @RequestParam(required = false) Double maxLat,
+            @RequestParam(required = false) Double maxLon,
+            @RequestParam(required = false) Double centerLat,
+            @RequestParam(required = false) Double centerLon,
+
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return eventService.search(kind, sport, from, to, access, admission, clubId, page, size);
+        return eventService.search(
+                kind, sport, from, to, access, admission, clubId,
+                minLat, minLon, maxLat, maxLon, centerLat, centerLon,
+                page, size
+        );
     }
 }

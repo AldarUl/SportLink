@@ -24,24 +24,32 @@ export type Event = {
   locationLon?: number | null;
 };
 
-export type Page<T> = {
-  content: T[];
-  page: number;
-  size: number;
-  totalElements: number;
-  totalPages: number;
-  last?: boolean;
-};
-
-export type EventQuery = {
-  page?: number;
-  size?: number;
-  from?: string;
-  to?: string;
-  sport?: string;
-  status?: EventStatus;
-  clubId?: string;
-  kind?: EventKind;
-};
-
-export type Bbox = { swLat: number; swLon: number; neLat: number; neLon: number };
+ export type Page<T> = {
+   content: T[];
+   page: number;
+   size: number;
+   totalElements: number;
+   totalPages: number;
+   last: boolean;
+ };
+ 
+ export type EventQuery = {
+   kind?: "TRAINING" | "EVENT";
+   sport?: string;
+   from?: string;
+   to?: string;
+   access?: "PUBLIC" | "CLUB_ONLY";
+   admission?: "AUTO" | "MANUAL";
+   clubId?: string;
+   page?: number;
+   size?: number;
+ };
+ 
+ export type Bbox = {
+   swLat: number;
+   swLon: number;
+   neLat: number;
+   neLon: number;
+    centerLat?: number;
+    centerLon?: number;
+ };

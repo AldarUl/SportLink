@@ -12,7 +12,10 @@ import java.util.UUID;
 @Entity
 @Table(name = "event", indexes = {
         @Index(name = "ix_event_kind_starts", columnList = "kind, starts_at"),
-        @Index(name = "ix_event_sport_starts", columnList = "sport, starts_at")
+        @Index(name = "ix_event_sport_starts", columnList = "sport, starts_at"),
+        @Index(name = "ix_event_location_lat", columnList = "location_lat"),
+        @Index(name = "ix_event_location_lon", columnList = "location_lon"),
+        @Index(name = "ix_event_location_lat_lon", columnList = "location_lat, location_lon")
 })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Event {

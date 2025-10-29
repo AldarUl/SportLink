@@ -27,7 +27,6 @@ public class EventController {
     private final EventService eventService;
     private final UserRepository userRepository;
 
-    /* helpers */
     private UUID currentUserId(Authentication auth) {
         String email = auth.getName();
         User u = userRepository.findByEmail(email).orElseThrow();
@@ -38,7 +37,6 @@ public class EventController {
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping
     public EventResponse create(@RequestBody @Valid EventCreateRequest req, Authentication auth) {
-        // Организатор в запросе должен совпадать с текущим пользователем
         UUID me = currentUserId(auth);
         if (!me.equals(req.organizerId())) {
             throw new IllegalArgumentException("OrganizerId must be current user");
@@ -49,10 +47,9 @@ public class EventController {
     @io.swagger.v3.oas.annotations.Operation(summary = "Детали события")
     @GetMapping("/{id}")
     public EventResponse get(@PathVariable UUID id, org.springframework.security.core.Authentication auth) {
-        java.util.UUID viewer = (auth == null) ? null : currentUserId(auth);
+        UUID viewer = (auth == null) ? null : currentUserId(auth);
         return eventService.get(id, viewer);
     }
-
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Поиск событий (пагинация и фильтры)")
     @GetMapping
@@ -63,12 +60,26 @@ public class EventController {
             @RequestParam(required = false) OffsetDateTime to,
             @RequestParam(required = false) EventAccess access,
             @RequestParam(required = false) EventAdmission admission,
-            @RequestParam(required = false) java.util.UUID clubId,   // ← добавили
+            @RequestParam(required = false) java.util.UUID clubId,
+
+            // --- BBOX + optional center ---
+            @RequestParam(required = false) Double minLat,
+            @RequestParam(required = false) Double minLon,
+            @RequestParam(required = false) Double maxLat,
+            @RequestParam(required = false) Double maxLon,
+            @RequestParam(required = false) Double centerLat,
+            @RequestParam(required = false) Double centerLon,
+
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
-        return eventService.search(kind, sport, from, to, access, admission, clubId, page, size);
+        return eventService.search(
+                kind, sport, from, to, access, admission, clubId,
+                minLat, minLon, maxLat, maxLon, centerLat, centerLon,
+                page, size
+        );
     }
+
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Изменить событие")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")

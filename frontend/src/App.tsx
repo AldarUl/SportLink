@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, Link } from "react-router-dom";
 import ProtectedRoute from "@/shared/ProtectedRoute";
-import MapPage from "@/pages/MapPage";
+import MapPage from "@/pages/map/MapPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
 import { useAuthStore } from "@/features/auth/store";
@@ -19,7 +19,7 @@ function Nav() {
         {isAuthed ? (
           <>
             <Link to="/profile" className="rounded-full border px-3 py-1">
-              {user?.name?.split(" ")[0] || user?.email}
+              {user?.displayName?.split(" ")[0] || user?.email}
             </Link>
             <button onClick={() => logout()} className="rounded bg-black px-3 py-1 text-white">
               Logout

@@ -41,7 +41,6 @@ function toPage(p: any): Page<Event> {
 /** Поиск событий (пагинация и фильтры) */
 export async function searchEvents(params: EventQuery): Promise<Page<Event>> {
   const { data } = await http.get("/event", { params });
-  // На всякий случай поддержим массив (хотя Swagger обещает page-объект)
   if (Array.isArray(data)) {
     const content = data.map(toEvent);
     return {
@@ -99,17 +98,17 @@ export async function cancelEvent(id: string): Promise<void> {
   await http.post(`/event/${id}/cancel`, {});
 }
 
-/** Фильтрация по BBOX (клиентская, если бэк не умеет bbox) */
+/** Клиентская фильтрация по BBOX (fallback) */
 export function filterByBbox(events: Event[], bbox: Bbox): Event[] {
   const { swLat, swLon, neLat, neLon } = bbox;
   return events.filter(
     (e) =>
       e.locationLat != null &&
       e.locationLon != null &&
-      e.locationLat >= swLat &&
-      e.locationLat <= neLat &&
-      e.locationLon >= swLon &&
-      e.locationLon <= neLon
+      (e.locationLat as number) >= swLat &&
+      (e.locationLat as number) <= neLat &&
+      (e.locationLon as number) >= swLon &&
+      (e.locationLon as number) <= neLon
   );
 }
 
@@ -129,8 +128,8 @@ export async function fetchEventsForViewport(
 }
 
 /**
- * Если на бэке добавлен bbox-фильтр (/event?minLat&minLon&maxLat&maxLon),
- * используем его, иначе — фолбэк на client-side фильтрацию.
+ * Серверная загрузка по BBOX через /event?minLat&minLon&maxLat&maxLon[&centerLat&centerLon].
+ * Если сервер не поддерживает bbox, падём в client-side фильтрацию.
  */
 export async function fetchEventsByBbox(
   bbox: Bbox,
@@ -138,18 +137,20 @@ export async function fetchEventsByBbox(
   size = 500
 ): Promise<Event[]> {
   try {
-    const { data } = await http.get("/event", {
-      params: {
-        minLat: bbox.swLat,
-        minLon: bbox.swLon,
-        maxLat: bbox.neLat,
-        maxLon: bbox.neLon,
-        from: time?.from,
-        to: time?.to,
-        size,
-        page: 0,
-      },
-    });
+    const params: Record<string, any> = {
+      minLat: bbox.swLat,
+      minLon: bbox.swLon,
+      maxLat: bbox.neLat,
+      maxLon: bbox.neLon,
+      from: time?.from,
+      to: time?.to,
+      size,
+      page: 0,
+    };
+    if (bbox.centerLat != null) params.centerLat = bbox.centerLat;
+    if (bbox.centerLon != null) params.centerLon = bbox.centerLon;
+
+    const { data } = await http.get("/event", { params });
     const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
     return arr.map(toEvent);
   } catch {
