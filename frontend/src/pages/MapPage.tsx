@@ -10,6 +10,10 @@ import { willOverlapWithAny } from "@/shared/schedule";
 
 type LngLat = [number, number];
 
+// Пороги зума: когда начинаем тянуть/показывать сущности
+const Z_EVENTS_FETCH = 11;      // события (ромбы)
+const Z_TRAININGS_FETCH = 12;   // тренировки (синие кружки)
+
 export default function MapPage() {
   const navigate = useNavigate();
   const { events } = useEventStore();
@@ -29,8 +33,19 @@ export default function MapPage() {
   const [selected, setSelected] = useState<{ e: AppEvent; coords: LngLat } | null>(null);
   const [zoom, setZoom] = useState<number>(12);
 
-  // simple press-effect state (без bounce)
   const [pressedId, setPressedId] = useState<string | null>(null);
+
+  // держим актуальный zoom в ref для дебаунса
+  const zoomRef = useRef<number>(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Если отзумились ниже порога отображения маркера — закрываем открытую карточку
+  useEffect(() => {
+    if (!selected) return;
+    const isTraining = (selected.e.kind || "EVENT").toUpperCase() === "TRAINING";
+    const needed = isTraining ? Z_TRAININGS_FETCH : Z_EVENTS_FETCH;
+    if (zoom < needed) setSelected(null);
+  }, [zoom, selected]);
 
   // --- Yandex Maps v3 + reactify ---
   useEffect(() => {
@@ -93,11 +108,28 @@ export default function MapPage() {
 
   // --- Debounced viewport fetch ---
   const debounceRef = useRef<number | null>(null);
+  const lastViewportKeyRef = useRef<string>("");
+
   const debouncedFetchViewport = (bbox: {
     minLat: number; minLon: number; maxLat: number; maxLon: number;
   }) => {
+    // бек не трогаем, если не достигли порога событий
+    if (zoomRef.current < Z_EVENTS_FETCH) {
+      if (debounceRef.current) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      return;
+    }
+    // дедуп «крупных» изменений окна
+    const key =
+      `${bbox.minLat.toFixed(3)}|${bbox.minLon.toFixed(3)}|${bbox.maxLat.toFixed(3)}|${bbox.maxLon.toFixed(3)}`;
+    if (key === lastViewportKeyRef.current) return;
+
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
+      if (zoomRef.current < Z_EVENTS_FETCH) return; // защитный повторный чек
+      lastViewportKeyRef.current = key;
       useEventStore.getState().fetchViewport(bbox);
     }, 350);
   };
@@ -168,10 +200,18 @@ export default function MapPage() {
 
         <YMapListener
           onUpdate={(e: any) => {
-            if (e?.location?.zoom) setZoom(e.location.zoom);
-            if (e?.location?.zoom >= 11) {
-              const b = e?.location?.bounds;
+            const loc = e?.location;
+            if (loc?.zoom) setZoom(loc.zoom);
+
+            // бек дергаем только если достигли порога событий
+            if (loc?.zoom && loc.zoom >= Z_EVENTS_FETCH) {
+              const b = loc?.bounds;
               if (b) handleBounds(b);
+            } else {
+              if (debounceRef.current) {
+                window.clearTimeout(debounceRef.current);
+                debounceRef.current = null;
+              }
             }
           }}
           onClick={() => setSelected(null)}
@@ -188,38 +228,37 @@ export default function MapPage() {
         {markers.map((e) => {
           const coords: LngLat = [e.locationLon as number, e.locationLat as number];
           const isTraining = (e.kind || "EVENT").toUpperCase() === "TRAINING";
+
+          // рендерим только когда достигнут соответствующий порог
+          if (isTraining && zoom < Z_TRAININGS_FETCH) return null;
+          if (!isTraining && zoom < Z_EVENTS_FETCH) return null;
+
           const hasApp = Boolean(findByEventId(e.id));
           const active = selected?.e.id === e.id;
-          const showMini = !active && zoom >= 13;
+
+          // Бейджи «автоматически при зуме»: показываем их вместе с маркерами
+          const showMini = !active && (isTraining ? zoom >= Z_TRAININGS_FETCH : zoom >= Z_EVENTS_FETCH);
 
           const title = e.title;
-          const subtitle = `${e.kind === "TRAINING" ? "Тренировка" : "Событие"} • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
-
-          // // --- размеры пина (как в CSS), и припуск для ауры ---
-          // const PIN = isTraining ? 40 : 52;    // px
-          // const TAIL = isTraining ? 10 : 12;   // px
-          // const HALO = isTraining ? 0 : 12;    // событиям даём припуск под ауру
+          const subtitle =
+            `${e.kind === "TRAINING" ? "Тренировка" : "Событие"} • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
 
           // --- размеры пина (как в CSS), и припуск для ауры ---
-          const PIN  = isTraining ? 34 : 52;   // было 40 / 52
-          const TAIL = isTraining ?  9 : 12;   // было 10 / 12
+          const PIN  = isTraining ? 34 : 52;
+          const TAIL = isTraining ?  9 : 12;
           const HALO = isTraining ?  0 : 12;
 
-
-          // Увеличенный бокс маркера, чтобы Yandex Maps ничего не обрезал
           const wrapStyle: React.CSSProperties = {
             width: `${PIN + 2 * HALO}px`,
             height: `${PIN + TAIL + 2 * HALO}px`,
             transform: `translate(${(-0.5 * (PIN + 2 * HALO))}px, ${(-1 * (PIN + TAIL + 2 * HALO))}px)`,
           };
 
-          // Сместим сам пин и ауру внутрь увеличенного бокса
           const pinStyle: React.CSSProperties = {
             left: `${HALO}px`,
             bottom: `${TAIL + HALO}px`,
             width: `${PIN}px`,
             height: `${PIN}px`,
-            // простой press-эффект — без подпрыгивания
             transform: pressedId === e.id ? "scale(0.96)" : undefined,
             transition: pressedId === e.id ? "transform 60ms ease-out, box-shadow 80ms ease" : undefined,
             boxShadow: pressedId === e.id ? "0 0 0 3px #fff, 0 6px 14px rgba(0,0,0,.26)" : undefined,
@@ -234,12 +273,13 @@ export default function MapPage() {
           return (
             <React.Fragment key={e.id}>
               <YMapMarker coordinates={coords} zIndex={active ? 1500 : (isTraining ? 900 : 1100)}>
-                <div className={`sl-pin-wrap ${isTraining ? "sl-wrap--training" : "sl-wrap--event"} ${active ? "sl-wrap--active" : ""}`}
+                <div
+                  className={`sl-pin-wrap ${isTraining ? "sl-wrap--training" : "sl-wrap--event"} ${active ? "sl-wrap--active" : ""}`}
                   style={wrapStyle}
                   onClick={(ev) => { ev.stopPropagation(); setSelected({ e, coords }); }}
                   title={title}
                 >
-                  {/* АУРА — только для событий (нижний слой) */}
+                  {/* АУРА — только для событий */}
                   {!isTraining && (
                     <span
                       className={`sl-aura ${active ? "sl-aura--active" : ""}`}
@@ -248,14 +288,14 @@ export default function MapPage() {
                     />
                   )}
 
-                  {/* РОМБОВЫЕ ВОЛНЫ — только для событий (над аурой, под пином) */}
+                  {/* РОМБОВЫЕ ВОЛНЫ — только для событий */}
                   {!isTraining && (
                     <div className="sl-ripples" aria-hidden="true">
                       <span></span><span></span><span></span>
                     </div>
                   )}
 
-                  {/* тело пина (верхний слой) */}
+                  {/* тело пина */}
                   <div
                     className={`sl-pin ${isTraining ? "sl-pin--training" : "sl-pin--event"} ${active ? "sl-pin--active" : ""}`}
                     style={pinStyle}
@@ -268,7 +308,7 @@ export default function MapPage() {
                     <span className="sl-band" />
                   </div>
 
-                  {/* мини-лейбл в покое */}
+                  {/* мини-лейбл (автопоказ при зуме — синхронно с маркерами) */}
                   {showMini && (
                     <div
                       className={`sl-badge ${!isTraining ? "sl-badge--event" : ""}`}
@@ -284,12 +324,9 @@ export default function MapPage() {
                     </div>
                   )}
 
-                  {/* POPUP (заменяет мини-лейбл) */}
+                  {/* POPUP (по клику) */}
                   {active && (
-                    <div
-                      className="sl-popover"
-                      onClick={(ev) => ev.stopPropagation()}
-                    >
+                    <div className="sl-popover" onClick={(ev) => ev.stopPropagation()}>
                       <PopupCard
                         e={e}
                         myPos={myPos}
