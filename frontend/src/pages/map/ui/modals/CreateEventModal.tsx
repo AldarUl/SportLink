@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { http } from "@/api/http";
 import type { LngLat } from "../../lib/geo";
 
@@ -57,7 +57,7 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
   if (!open) return null;
 
   const [title, setTitle] = useState("");
-  const [sport, setSport] = useState<Sport>("RUNNING");        // храним код
+  const [sport, setSport] = useState<Sport>("RUNNING");
   const [access, setAccess] = useState<Access>("PUBLIC");
   const [admission, setAdmission] = useState<Admission>("AUTO");
   const [durationMin, setDurationMin] = useState<number>(60);
@@ -69,11 +69,16 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
   // фиксированные координаты из ПКМ
   const [lon, lat] = coords;
 
+  // если это TRAINING — принудительно MANUAL
+  useEffect(() => {
+    if (kind === "TRAINING") setAdmission("MANUAL");
+  }, [kind]);
+
   // старт по умолчанию — ближайшие 15 минут, локальное время
   const defaultLocalStart = useMemo(() => {
     const dt = new Date();
     const minutes = dt.getMinutes();
-    const rounded = Math.ceil((minutes + 1) / 15) * 15; // ближайшая четверть часа
+    const rounded = Math.ceil((minutes + 1) / 15) * 15;
     dt.setMinutes(rounded, 0, 0);
     return toDatetimeLocalValue(dt);
   }, []);
@@ -94,36 +99,38 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
     setBusy(true);
     setError(null);
     try {
-      // конвертируем локальное значение в ISO (UTC) для бэка
       const startsAtISO = new Date(startsLocal).toISOString();
+
+      const admissionForBackend: Admission =
+        kind === "TRAINING" ? "MANUAL" : admission;
 
       console.info("[CreateEventModal] submit → coords to backend", {
         kind,
         locationLat: lat,
         locationLon: lon,
         startsAtISO,
+        admission: admissionForBackend,
       });
-      
+
       const payload: CreatePayload = {
         kind,
         access,
-        admission,
+        admission: admissionForBackend,
         title: title.trim(),
-        sport, // код для API
+        sport,
         startsAt: startsAtISO,
         durationMin: Number(durationMin),
         capacity: Number(slots),
-        waitlistEnabled: true, // ← всегда включено
+        waitlistEnabled: true, // лист ожидания всегда включён
         locationLat: lat,
         locationLon: lon,
         description: description.trim() || null,
       };
 
-      // важно: без удвоения /api/v1 (если baseURL="/api/v1")
-      await http.post("/event", payload);
+        const { data } = await http.post("/event", payload); // backend отдает EventResponse
+        onCreated?.(data); // пробрасываем созданный объект наверх
 
-      onCreated?.();
-      onClose();
+        onClose();
     } catch (err: any) {
       setError(err?.message || "Не удалось создать. Попробуйте ещё раз.");
     } finally {
@@ -180,13 +187,20 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
           <div>
             <label className="mb-1 block text-sm">Приём заявок</label>
             <select
-              className="w-full rounded-md border px-3 py-2"
+              className="w-full rounded-md border px-3 py-2 disabled:bg-gray-100 disabled:text-gray-500"
               value={admission}
               onChange={(e) => setAdmission(e.target.value as Admission)}
+              disabled={kind === "TRAINING"} // фиксируем MANUAL
+              title={kind === "TRAINING" ? "Для тренировок приём только вручную" : ""}
             >
               <option value="AUTO">Автоматически</option>
               <option value="MANUAL">Вручную</option>
             </select>
+            {kind === "TRAINING" && (
+              <p className="mt-1 text-xs text-gray-500">
+                Для тренировок приём заявок всегда «Вручную» (требование сервера).
+              </p>
+            )}
           </div>
 
           <div>

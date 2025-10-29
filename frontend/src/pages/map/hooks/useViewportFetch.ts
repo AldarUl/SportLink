@@ -3,17 +3,24 @@ import { fetchEventsByBbox } from "@/entities/event/api";
 import { useEventStore } from "@/entities/event/store";
 import type { Bbox } from "@/entities/event/types";
 
-type YBounds = [[number, number], [number, number]]; // [[minLon,minLat],[maxLon,maxLat]]
+type YBounds = [[number, number], [number, number]]; // [ [lon1, lat1], [lon2, lat2] ]
 
 function toBbox(bounds: YBounds): Bbox {
-  const [[minLon, minLat], [maxLon, maxLat]] = bounds;
+  const [[lon1, lat1], [lon2, lat2]] = bounds;
+
+  const minLat = Math.min(lat1, lat2);
+  const maxLat = Math.max(lat1, lat2);
+  const minLon = Math.min(lon1, lon2);
+  const maxLon = Math.max(lon1, lon2);
+
   return {
+    // юго-запад и северо-восток после нормализации
     swLat: minLat,
     swLon: minLon,
     neLat: maxLat,
     neLon: maxLon,
-    centerLat: (minLat + maxLat) / 2,
-    centerLon: (minLon + maxLon) / 2,
+    centerLat: (lat1 + lat2) / 2,
+    centerLon: (lon1 + lon2) / 2,
   };
 }
 
@@ -47,10 +54,11 @@ export function useViewportFetch(
         const events = await fetchEventsByBbox(bbox, undefined, 500);
         if (seqRef.current !== mySeq) return;
         setEvents(events);
-      } catch {
-        // можно добавить toast
+      } catch (err) {
+        console.error("[useViewportFetch] fetch failed:", err); // <-- лог
       }
     }, 220);
+
   }, [cancel, setEvents]);
 
   return { handleBounds, cancel };

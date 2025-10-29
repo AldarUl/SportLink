@@ -59,7 +59,11 @@ http.interceptors.response.use(
       original?.url?.includes("/auth/login") ||
       original?.url?.includes("/auth/refresh");
 
-    if (res?.status === 401 && !isAuthCall && !original?._retry) {
+    const shouldRetryWithRefresh =
+      (res?.status === 401 || res?.status === 403) && !isAuthCall && !original?._retry;
+
+
+    if (shouldRetryWithRefresh) {
       // есть параллельный refresh — подписываемся и повторим запрос
       if (isRefreshing) {
         return new Promise((resolve) => {
