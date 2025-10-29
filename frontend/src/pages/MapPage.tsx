@@ -27,7 +27,10 @@ export default function MapPage() {
   const [geoError, setGeoError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<{ e: AppEvent; coords: LngLat } | null>(null);
-  const [zoom, setZoom] = useState<number>(12); // актуальный зум для показа мини-лейбла
+  const [zoom, setZoom] = useState<number>(12);
+
+  // simple press-effect state (без bounce)
+  const [pressedId, setPressedId] = useState<string | null>(null);
 
   // --- Yandex Maps v3 + reactify ---
   useEffect(() => {
@@ -53,8 +56,7 @@ export default function MapPage() {
 
   useEffect(() => {
     loadMine();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadMine]);
 
   // --- Geolocation ---
   useEffect(() => {
@@ -188,59 +190,126 @@ export default function MapPage() {
           const isTraining = (e.kind || "EVENT").toUpperCase() === "TRAINING";
           const hasApp = Boolean(findByEventId(e.id));
           const active = selected?.e.id === e.id;
-          const showMini = active || zoom >= 13;
+          const showMini = !active && zoom >= 13;
 
           const title = e.title;
           const subtitle = `${e.kind === "TRAINING" ? "Тренировка" : "Событие"} • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
 
+          // // --- размеры пина (как в CSS), и припуск для ауры ---
+          // const PIN = isTraining ? 40 : 52;    // px
+          // const TAIL = isTraining ? 10 : 12;   // px
+          // const HALO = isTraining ? 0 : 12;    // событиям даём припуск под ауру
+
+          // --- размеры пина (как в CSS), и припуск для ауры ---
+          const PIN  = isTraining ? 34 : 52;   // было 40 / 52
+          const TAIL = isTraining ?  9 : 12;   // было 10 / 12
+          const HALO = isTraining ?  0 : 12;
+
+
+          // Увеличенный бокс маркера, чтобы Yandex Maps ничего не обрезал
+          const wrapStyle: React.CSSProperties = {
+            width: `${PIN + 2 * HALO}px`,
+            height: `${PIN + TAIL + 2 * HALO}px`,
+            transform: `translate(${(-0.5 * (PIN + 2 * HALO))}px, ${(-1 * (PIN + TAIL + 2 * HALO))}px)`,
+          };
+
+          // Сместим сам пин и ауру внутрь увеличенного бокса
+          const pinStyle: React.CSSProperties = {
+            left: `${HALO}px`,
+            bottom: `${TAIL + HALO}px`,
+            width: `${PIN}px`,
+            height: `${PIN}px`,
+            // простой press-эффект — без подпрыгивания
+            transform: pressedId === e.id ? "scale(0.96)" : undefined,
+            transition: pressedId === e.id ? "transform 60ms ease-out, box-shadow 80ms ease" : undefined,
+            boxShadow: pressedId === e.id ? "0 0 0 3px #fff, 0 6px 14px rgba(0,0,0,.26)" : undefined,
+          };
+          const auraStyle: React.CSSProperties = {
+            left: `${HALO}px`,
+            bottom: `${TAIL + HALO}px`,
+            width: `${PIN}px`,
+            height: `${PIN}px`,
+          };
+
           return (
             <React.Fragment key={e.id}>
-              {/* сам пин */}
-              <YMapMarker coordinates={coords} zIndex={active ? 1500 : 500}>
-                <div
-                  className={`sl-pin ${isTraining ? "sl-pin--training" : "sl-pin--event"} ${active ? "sl-pin--active" : ""}`}
-                  title={title}
+              <YMapMarker coordinates={coords} zIndex={active ? 1500 : (isTraining ? 900 : 1100)}>
+                <div className={`sl-pin-wrap ${isTraining ? "sl-wrap--training" : "sl-wrap--event"} ${active ? "sl-wrap--active" : ""}`}
+                  style={wrapStyle}
                   onClick={(ev) => { ev.stopPropagation(); setSelected({ e, coords }); }}
-                />
-                {/* мини-плашка рядом (как у дефолтного маркера) */}
-                {showMini && (
-                  <div
-                    className="sl-badge"
-                    onClick={(ev) => { ev.stopPropagation(); setSelected({ e, coords }); }}
-                  >
-                    <div className="sl-badge__title">{title}</div>
-                    <div className="sl-badge__sub">{subtitle}</div>
-                  </div>
-                )}
-              </YMapMarker>
-
-              {/* раскрытый попап */}
-              {active && (
-                <YMapMarker coordinates={coords} zIndex={2000}>
-                  <div
-                    className="pointer-events-auto"
-                    onClick={(ev) => ev.stopPropagation()}
-                    style={{ transform: "translate(20px, -10px)" }}
-                  >
-                    <PopupCard
-                      e={e}
-                      myPos={myPos}
-                      coords={coords}
-                      hasApp={hasApp}
-                      onApply={handleApply}
-                      onWithdraw={(eventId) => withdrawByEvent(eventId)}
-                      onClose={() => setSelected(null)}
-                      onMore={() => navigate(`/event/${e.id}`)} // роут «Подробнее»
+                  title={title}
+                >
+                  {/* АУРА — только для событий (нижний слой) */}
+                  {!isTraining && (
+                    <span
+                      className={`sl-aura ${active ? "sl-aura--active" : ""}`}
+                      style={auraStyle}
+                      aria-hidden="true"
                     />
+                  )}
+
+                  {/* РОМБОВЫЕ ВОЛНЫ — только для событий (над аурой, под пином) */}
+                  {!isTraining && (
+                    <div className="sl-ripples" aria-hidden="true">
+                      <span></span><span></span><span></span>
+                    </div>
+                  )}
+
+                  {/* тело пина (верхний слой) */}
+                  <div
+                    className={`sl-pin ${isTraining ? "sl-pin--training" : "sl-pin--event"} ${active ? "sl-pin--active" : ""}`}
+                    style={pinStyle}
+                    onPointerDown={() => setPressedId(e.id)}
+                    onPointerUp={() => setPressedId(null)}
+                    onPointerCancel={() => setPressedId(null)}
+                    onPointerLeave={() => setPressedId(null)}
+                  >
+                    {active && <span className="sl-shine" />}
+                    <span className="sl-band" />
                   </div>
-                </YMapMarker>
-              )}
+
+                  {/* мини-лейбл в покое */}
+                  {showMini && (
+                    <div
+                      className={`sl-badge ${!isTraining ? "sl-badge--event" : ""}`}
+                      onClick={(ev) => { ev.stopPropagation(); setSelected({ e, coords }); }}
+                    >
+                      <div className="sl-badge__title">
+                        {!isTraining && <span className="sl-chip sl-chip--event">СОБЫТИЕ</span>}
+                        <span className={!isTraining ? "ml-1" : ""}>{title}</span>
+                      </div>
+                      <div className={`sl-badge__sub ${!isTraining ? "sl-badge__sub--event" : ""}`}>
+                        {subtitle}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* POPUP (заменяет мини-лейбл) */}
+                  {active && (
+                    <div
+                      className="sl-popover"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
+                      <PopupCard
+                        e={e}
+                        myPos={myPos}
+                        coords={coords}
+                        hasApp={hasApp}
+                        onApply={handleApply}
+                        onWithdraw={(eventId) => withdrawByEvent(eventId)}
+                        onClose={() => setSelected(null)}
+                        onMore={() => navigate(`/event/${e.id}`)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </YMapMarker>
             </React.Fragment>
           );
         })}
       </YMap>
 
-      {/* Bottom-sheet кратко оставляю как есть */}
+      {/* Bottom-sheet */}
       <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 mx-auto w-[min(960px,95%)]">
         <div className="pointer-events-auto rounded-2xl bg-white/95 p-3 shadow-xl">
           <div className="mb-2 text-sm font-semibold text-gray-700">Мои ближайшие тренировки</div>
@@ -299,7 +368,7 @@ function PopupCard({
   onMore: () => void;
 }) {
   return (
-    <div className="relative w-72 rounded-xl bg-white p-3 shadow-xl">
+    <div className="relative w-72 rounded-xl bg-white p-3 shadow-xl border border-neutral-200/60">
       <button
         onClick={onClose}
         className="absolute right-2 top-2 rounded px-2 text-sm text-gray-500 hover:bg-gray-100"

@@ -1,75 +1,441 @@
 @import "tailwindcss";
 
+/* --- layout root --- */
 html, body, #root { height: 100%; margin: 0; }
 
-/* --- SportLink Map Pins --- */
-.sl-pin {
+/* =====================  MAP PINS  ===================== */
+
+/* Обёртка/якорь маркера */
+.sl-pin-wrap{
+  --pin: 40px;     /* базовый размер пина (training) */
+  --tail: 10px;    /* высота хвостика */
+  --band: 6px;     /* толщина внутренней полосы (training) */
+  --halo: 0px;     /* припуск под ауру */
   position: relative;
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: 3px solid #fff;
-  box-shadow: 0 6px 18px rgba(0,0,0,.25);
-  /* якорение делаем в шаблоне layout, НЕ через transform */
+  width:  calc(var(--pin) + 2 * var(--halo));
+  height: calc(var(--pin) + var(--tail) + 2 * var(--halo));
+  transform: translate(
+    calc(-0.5 * (var(--pin) + 2 * var(--halo))),
+    calc(-1 *    (var(--pin) + var(--tail) + 2 * var(--halo)))
+  );
   pointer-events: auto;
-  cursor: pointer;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
 }
+/* training — без ауры, event — с аурой и крупнее */
+.sl-wrap--training{ --pin: 34px; --tail: 9px; --band: 5px; --halo: 0px; }
+.sl-wrap--event   { --pin: 52px; --tail: 12px; --band: 7px; --halo: 12px; }
 
-/* «хвостик» пина */
-.sl-pin::after {
-  content: "";
+/* Анимируемая переменная для ауры */
+@property --ang { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+
+/* Аура (только у событий) — форма ромба */
+.sl-aura{
   position: absolute;
-  left: 50%; bottom: -8px;
-  width: 12px; height: 12px;
-  transform: translate(-50%, 0) rotate(45deg);
+  left: var(--halo);
+  bottom: calc(var(--tail) + var(--halo));
+  width: var(--pin); height: var(--pin);
+  z-index: 0; pointer-events: none;
+  transform: scale(1.18);
+  transform-origin: 50% 50%;
+  clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%);
+  mix-blend-mode: screen;
+  filter: blur(10px) brightness(1.1);
+  opacity: .42;
+  background: conic-gradient(
+    from var(--ang),
+    rgba(120,255,196,0.00) 0deg,
+    rgba(120,255,196,0.28) 28deg,
+    rgba(56,255,171,0.48) 60deg,
+    rgba(120,255,196,0.22) 100deg,
+    rgba(120,255,196,0.00) 140deg,
+    rgba(120,255,196,0.26) 200deg,
+    rgba(56,255,171,0.42) 246deg,
+    rgba(120,255,196,0.18) 300deg,
+    rgba(120,255,196,0.00) 360deg
+  );
+  animation: sl-aura-rot 18s linear infinite;
+  transition: opacity 220ms ease;
+}
+.sl-aura.sl-aura--active{ opacity: .52; }
+
+/* Тело пина (общие стили) */
+.sl-pin{
+  position: absolute;
+  left: var(--halo);
+  bottom: calc(var(--tail) + var(--halo));
+  width: var(--pin); height: var(--pin);
+  display:block; cursor:pointer; user-select:none;
+  overflow:hidden; z-index: 1;
+  box-shadow: 0 0 0 3px #fff, 0 8px 20px rgba(0,0,0,.25);
+  will-change: transform;
+  transform-origin: 50% 100%;
+  transition: transform 220ms cubic-bezier(.22,1,.36,1), box-shadow 180ms ease;
+}
+/* хвостик к координате */
+.sl-pin::after{
+  content:""; position:absolute; left:50%;
+  bottom: calc(-1 * (var(--tail) + var(--halo)));
+  width:12px; height:12px;
+  transform: translate(-50%,0) rotate(45deg);
   background: currentColor;
-  border-bottom: 3px solid #fff;
-  border-right: 3px solid #fff;
-  border-bottom-right-radius: 2px;
+  border-bottom:3px solid #fff; border-right:3px solid #fff; border-bottom-right-radius:2px;
 }
 
-/* Варианты */
-.sl-pin--user     { color:#2563eb; background: currentColor; }
-.sl-pin--training { color:#0ea5e9; background: currentColor; }
-.sl-pin--event    { color:#ef4444; background: currentColor; width:32px; height:32px; }
+/* =====================  TRAINING (синий круг)  ===================== */
 
-/* Активный (по клику) — лёгкий «пульс» */
-.sl-pin--active { animation: sl-pulse 1200ms ease-out infinite; }
+.sl-pin--training{
+  background:#0ea5e9; color:#0ea5e9; border-radius:50%;
+  /* пульсация ВСЕГДА */
+  animation: sl-pulse 1600ms ease-out infinite;
+}
+/* внутреннее кольцо */
+.sl-band{ position:absolute; inset:0; pointer-events:none; border-radius:inherit; box-shadow: inset 0 0 0 var(--band) currentColor; }
 
-@keyframes sl-pulse {
-  0%   { box-shadow: 0 0 0 0 rgba(37,99,235,.35), 0 8px 20px rgba(0,0,0,.3); }
-  100% { box-shadow: 0 0 0 14px rgba(37,99,235,0), 0 8px 20px rgba(0,0,0,.3); }
+/* hover — чуть больше и ярче тень */
+.sl-pin--training:hover{
+  transform: scale(1.06);
+  box-shadow: 0 0 0 3px #fff, 0 12px 26px rgba(0,0,0,.32);
 }
 
-/* --- Маленькая подпись у маркера --- */
-.sl-badge {
+
+/* выбранный training — постоянное увеличение, анимации не сбрасываются */
+.sl-pin--training.sl-pin--active{ transform: scale(1.09); }
+
+/* отключим лишний «shine», если вдруг был подключён где-то ещё */
+.sl-pin > .sl-shine{ display:none !important; }
+
+/* =====================  EVENT (зелёный ромб)  ===================== */
+
+.sl-pin--event{
+  --glint-speed: 2s;
+  --glint-breathe: 1s;
+  border-radius:0;
+  color:#16a34a;
+  clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%);
+  background: linear-gradient(160deg,#34d399 0%,#10b981 45%,#059669 65%,#10b981 85%,#34d399 100%);
+  box-shadow: 0 0 0 1.6px rgba(255,255,255,.55), 0 8px 20px rgba(0,0,0,.28);
+}
+/* выбранный event — просто увеличивается */
+.sl-pin--event.sl-pin--active{ transform: scale(1.08); }
+
+/* glint-слой */
+.sl-pin--event > .sl-band{
+  box-shadow: none;
+  inset:-2px; z-index:3; border-radius:0 !important;
+  clip-path: polygon(50% 0,100% 50%,50% 100%,0 50%);
+  overflow:hidden;
+  mix-blend-mode: screen;
+  opacity:1;
+}
+.sl-pin--event > .sl-band::before{
+  content:"";
+  position:absolute;
+  width:300%; height:300%;
+  left:-100%; top:-100%;
+  background: linear-gradient(90deg,
+    rgba(255, 62, 214, 0)   0%,
+    rgba(255, 62, 214, 0)  42%,
+    rgba(255, 62, 214, .95)50%,
+    rgba(168, 85, 247, .90)55%,
+    rgba(255, 62, 214, 0)  63%,
+    rgba(255, 62, 214, 0) 100%
+  );
+  filter: saturate(1.6) brightness(1.15);
+  transform-origin: 50% 50%;
+  transform: rotate(35deg) translate(-65%, -65%);
+  animation: glint-sweep var(--glint-speed) linear infinite,
+             glint-breathe var(--glint-breathe) ease-in-out infinite;
+}
+
+/* “Моё место” */
+.sl-pin--user{
+  background:#fff; border-radius:50%;
+  box-shadow: 0 0 0 3px #2563eb, 0 8px 20px rgba(0,0,0,.25);
+  color:#2563eb;
+}
+
+/* ----- подписи/попапы/кнопки ----- */
+.sl-badge{
+  position:absolute; left: calc(var(--pin) + 2 * var(--halo) + 10px); top: calc(-0.20 * var(--pin));
+  max-width: 260px; background:#fff; border-radius:12px;
+  padding:6px 10px; box-shadow:0 6px 18px rgba(0,0,0,.15); border:1px solid rgba(0,0,0,.06);
+  pointer-events:auto;
+}
+.sl-badge__title{ font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sl-badge__sub{ margin-top:2px; font-size:11px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.sl-popover{
+  position:absolute; left: calc(var(--pin) + 2 * var(--halo) + 10px); top: calc(-0.26 * var(--pin));
+  pointer-events:auto; z-index:6;
+}
+.sl-popover::before{
+  content:""; position:absolute; left:-6px; top:20px; width:12px; height:12px;
+  background:#fff; border-left:1px solid rgba(0,0,0,.08); border-bottom:1px solid rgba(0,0,0,.08);
+  transform: rotate(45deg);
+}
+
+.sl-btn{ border:1px solid #e5e7eb; padding:6px 10px; border-radius:8px; font-size:12px; background:#fff; }
+.sl-btn--primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
+
+/* =====================  ANIMATIONS  ===================== */
+@keyframes sl-pulse{
+  0%  { box-shadow:0 0 0 0 rgba(37,99,235,.35), 0 8px 20px rgba(0,0,0,.3); }
+  100%{ box-shadow:0 0 0 14px rgba(37,99,235,0), 0 8px 20px rgba(0,0,0,.3); }
+}
+@keyframes training-tap{
+  0%   { transform: scale(.94); }
+  60%  { transform: scale(1.10); }
+  100% { transform: scale(1.00); }
+}
+@keyframes sl-aura-rot{ to { --ang: 360deg; } }
+@keyframes glint-sweep{
+  0%   { transform: rotate(35deg) translate(-65%, -65%); }
+  100% { transform: rotate(35deg) translate( 65%,  65%); }
+}
+@keyframes glint-breathe{
+  0%,100% { filter: saturate(1.4) brightness(1.05); }
+  50%     { filter: saturate(1.9) brightness(1.22); }
+}
+
+/* accessibility */
+@media (prefers-reduced-motion: reduce){
+  .sl-aura{ animation: none; }
+  .sl-pin--event > .sl-band::before{ animation: none; }
+  .sl-pin--training{ animation: none; }
+}
+
+
+
+
+
+/* ===== EVENT diamond RIPPLE (always on) ===== */
+
+/* контейнер рипплов: совпадает с телом пина по размеру, стоит за пином */
+.sl-ripples{
   position: absolute;
-  left: 32px;           /* отступ вправо от пина */
-  top: -8px;
-  max-width: 240px;
-  background: #fff;
-  border-radius: 12px;
-  padding: 6px 10px;
-  box-shadow: 0 6px 18px rgba(0,0,0,.15);
-  border: 1px solid rgba(0,0,0,.06);
-  pointer-events: auto;
+  left: var(--halo);
+  bottom: calc(var(--tail) + var(--halo));
+  width: var(--pin); height: var(--pin);
+  pointer-events: none;
+  z-index: 0;                 /* под .sl-pin, но над .sl-aura если вставим после неё */
+  transform-origin: 50% 50%;
+  /* чуть больше, чтобы старт не упирался в кромку пина */
+  /* без clip-path для производительности */
 }
 
-.sl-badge__title {
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* отдельная «волна» — повёрнутый квадрат = ромб */
+.sl-ripples > span{
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 100%; height: 100%;
+  box-sizing: border-box;
+  border: 2.5px solid rgba(34,197,94,.48);   /* ~ #22c55e с прозрачностью */
+  transform: translate(-50%, -50%) rotate(45deg) scale(0.90);
+  will-change: transform, opacity;
+  animation: sl-diamond-ripple 2.8s ease-out infinite;
+  filter: saturate(1.2) brightness(1.05);
+  mix-blend-mode: screen;                    /* на тёмной карте смотрится мягче */
 }
 
-.sl-badge__sub {
-  margin-top: 2px;
-  font-size: 11px;
-  color: #64748b;
-  white-space: nowrap;
+/* чуть разные задержки, чтобы шли цепочкой */
+.sl-ripples > span:nth-child(2){ animation-delay: .6s;  opacity: .85; }
+.sl-ripples > span:nth-child(3){ animation-delay: 1.2s; opacity: .70; }
+
+/* База: рипплы могут масштабироваться плавно */
+.sl-ripples{
+  transform: scale(1);
+  transition: transform 220ms cubic-bezier(.22,1,.36,1);
+}
+
+/* Когда событие активно — масштаб рипплов такой же, как у пина (1.08) */
+.sl-pin-wrap:has(.sl-pin--event.sl-pin--active) .sl-ripples{
+  transform: scale(1.08);
+}
+
+/* можно и бордер чуть плотнее у активного */
+.sl-pin-wrap:has(.sl-pin--event.sl-pin--active) .sl-ripples > span{
+  border-color: rgba(34,197,94,.60);
+}
+
+
+/* активная/выбранная — можно сделать капельку плотнее */
+.sl-pin--event.sl-pin--active ~ .sl-ripples > span{
+  border-color: rgba(34,197,94,.60);
+}
+
+/* ключевые кадры: расширяем ромб и гасим его */
+@keyframes sl-diamond-ripple{
+  0%   { opacity: .75; transform: translate(-50%, -50%) rotate(45deg) scale(0.90); }
+  70%  { opacity: .22; }
+  100% { opacity: 0;   transform: translate(-50%, -50%) rotate(45deg) scale(1.80); }
+}
+
+/* reduced motion — убираем анимации рипплов */
+@media (prefers-reduced-motion: reduce){
+  .sl-ripples > span{ animation: none !important; }
+}
+
+
+/* hover — лёгкое увеличение и тень, как у training */
+.sl-pin--event:hover{
+  transform: scale(1.06);
+  box-shadow: 0 0 0 1.6px rgba(255,255,255,.75), 0 12px 26px rgba(0,0,0,.32);
+}
+
+/* НОВОЕ: обычное «утапливание» кнопки */
+.sl-pin--training:active,
+.sl-pin--event:active{
+  transform: scale(.96);
+  transition: transform 60ms ease-out, box-shadow 80ms ease;
+  box-shadow: 0 0 0 3px #fff, 0 6px 14px rgba(0,0,0,.26);
+}
+
+.sl-wrap--active .sl-ripples{ transform: scale(1.08); }
+.sl-wrap--active .sl-ripples > span{ border-color: rgba(34,197,94,.60); }
+
+
+/* ===== EVENT diamond — GOLD METALLIC THEME (override) ===== */
+
+/* сам ромб: золотой градиент + тёплый блик */
+.sl-pin--event{
+  color:#d4af37; /* цвет хвостика (currentColor) */
+  background: linear-gradient(
+    160deg,
+    #FFF4C3 0%,
+    #F8DD7E 28%,
+    #E8C157 52%,
+    #C99A2E 72%,
+    #F0D27A 100%
+  );
+  box-shadow: 0 0 0 1.6px rgba(255,255,255,.60), 0 8px 20px rgba(0,0,0,.28);
+}
+
+/* бегущий «блик» поверх ромба — золотисто-кремовый */
+.sl-pin--event > .sl-band::before{
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0)   0%,
+    rgba(255,255,255,0)  42%,
+    rgba(255,253,240,.95)50%,
+    rgba(255,220,110,.90)55%,
+    rgba(255,255,255,0)  63%,
+    rgba(255,255,255,0) 100%
+  );
+  filter: saturate(1.2) brightness(1.1) contrast(1.05);
+}
+
+/* аура вокруг события — золотая конусная заливка */
+.sl-aura{
+  background: conic-gradient(
+    from var(--ang),
+    rgba(255,240,200,0.00) 0deg,
+    rgba(255,236,180,0.28) 28deg,
+    rgba(255,222,140,0.48) 60deg,
+    rgba(241,194, 74,0.30) 100deg,
+    rgba(255,236,180,0.00) 140deg,
+    rgba(255,230,160,0.26) 200deg,
+    rgba(212,175, 55,0.42) 246deg,
+    rgba(241,194, 74,0.24) 300deg,
+    rgba(255,240,200,0.00) 360deg
+  );
+}
+
+/* ромбовидные волны — золотые обводки */
+.sl-ripples > span{
+  border-color: rgba(212,175,55,.55); /* #D4AF37 */
+}
+
+/* активное событие — волны чуть насыщеннее */
+.sl-pin-wrap:has(.sl-pin--event.sl-pin--active) .sl-ripples > span,
+.sl-wrap--active .sl-ripples > span{
+  border-color: rgba(212,175,55,.75);
+}
+
+
+
+/* ===== Mini badge: EVENT look (gold) ===== */
+.sl-badge--event{
+  background: linear-gradient(180deg, #FFF9E6 0%, #FFF2CC 100%);
+  border-color: rgba(212,175,55,.35);              /* #D4AF37 */
+  box-shadow: 0 6px 18px rgba(212,175,55,.12);     /* тёплая тень */
+  padding-left: 12px;                               /* место под левую кромку */
+  position: relative;
+}
+.sl-badge--event::before{
+  content:"";
+  position:absolute; left:0; top:8px; bottom:8px;
+  width:4px; border-radius:6px;
+  background: linear-gradient(180deg, #F6D676 0%, #D4AF37 100%); /* золотая кромка слева */
+  opacity:.95;
+}
+.sl-badge__sub--event{
+  color:#8a6a00;                                    /* тёплый подпись-цвет */
+}
+
+/* Шильдик перед заголовком */
+.sl-chip{
+  display:inline-block;
+  font-size:11px; line-height:1;
+  font-weight:700; letter-spacing:.02em;
+  padding:3px 6px; border-radius:9999px;
+  vertical-align:middle; transform: translateY(-1px);
+}
+.sl-chip--event{
+  background:#FFF1B3;
+  color:#7A5A00;
+  border:1px solid rgba(212,175,55,.6);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.65);
+}
+
+
+/* ===== Fix: расширить мини-карточку событий и разрешить перенос ===== */
+.sl-badge--event{
+  /* адаптивная ширина: не уже 240px и не шире 360px */
+  min-width: 240px;
+  max-width: clamp(280px, 26vw, 360px);
+}
+
+/* заголовок и подзаголовок у событий могут переноситься */
+.sl-badge--event .sl-badge__title,
+.sl-badge--event .sl-badge__sub{
+  white-space: normal;                 /* переопределяем nowrap */
+}
+
+/* аккуратно раскладываем шильдик [СОБЫТИЕ] и название */
+.sl-badge--event .sl-badge__title{
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;                     /* если название длинное — переносится на новую строку */
+}
+
+.sl-chip{ flex-shrink: 0; }            /* шильдик не сжимается */
+
+/* (опционально) ограничить две строки у названия, чтобы не раздувалось */
+.sl-badge--event .sl-badge__title span:last-child{
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* было: 40/10/6; стало: 34/9/5 */
+.sl-wrap--training{ --pin: 34px; --tail: 9px; --band: 5px; --halo: 0px; }
+
+/* хвостик пина пусть масштабируется от --tail (раньше было фикс. 12px) */
+.sl-pin::after{
+  width: calc(var(--tail) + 2px);
+  height: calc(var(--tail) + 2px);
+}
+
+/* пульс — используем переменную для радиуса растекания */
+.sl-pin--training{
+  background:#0ea5e9; color:#0ea5e9; border-radius:50%;
+  --pulse-spread: 11px;                 /* раньше визуально ≈14px, поджали под меньший размер */
+  animation: sl-pulse 1600ms ease-out infinite;
+}
+
+/* переопределим кейфреймы на переменную */
+@keyframes sl-pulse{
+  0%  { box-shadow:0 0 0 0 rgba(37,99,235,.35), 0 8px 20px rgba(0,0,0,.3); }
+  100%{ box-shadow:0 0 0 var(--pulse-spread, 14px) rgba(37,99,235,0), 0 8px 20px rgba(0,0,0,.3); }
 }
