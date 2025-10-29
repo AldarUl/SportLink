@@ -10,9 +10,21 @@ import { willOverlapWithAny } from "@/shared/schedule";
 
 type LngLat = [number, number];
 
-// Пороги зума: когда начинаем тянуть/показывать сущности
-const Z_EVENTS_FETCH = 11;      // события (ромбы)
-const Z_TRAININGS_FETCH = 12;   // тренировки (синие кружки)
+// Пороги зума и физический размер окна
+const Z_EVENTS_FETCH = 11;          // события (ромбы)
+const Z_TRAININGS_FETCH = 13;       // тренировки (синие кружки) — делаем ближе
+const MAX_TRAININGS_VIEW_KM = 8;    // тренировки показываем, если диагональ окна ≤ 8 км
+const MAX_EVENTS_VIEW_KM = 80;      // (опц.) события тянем до 80 км диагонали
+
+// Грубая haversine для км
+function kmBetween([lon1, lat1]: [number, number], [lon2, lat2]: [number, number]) {
+  const R = 6371;
+  const toRad = (d: number) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
 
 export default function MapPage() {
   const navigate = useNavigate();
@@ -32,14 +44,15 @@ export default function MapPage() {
 
   const [selected, setSelected] = useState<{ e: AppEvent; coords: LngLat } | null>(null);
   const [zoom, setZoom] = useState<number>(12);
+  const [viewportDiagKm, setViewportDiagKm] = useState<number>(Infinity); // <-- теперь внутри компонента
 
   const [pressedId, setPressedId] = useState<string | null>(null);
 
-  // держим актуальный zoom в ref для дебаунса
+  // актуальный zoom для дебаунса
   const zoomRef = useRef<number>(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
-  // Если отзумились ниже порога отображения маркера — закрываем открытую карточку
+  // если ушли ниже порога — закрываем открытый попап
   useEffect(() => {
     if (!selected) return;
     const isTraining = (selected.e.kind || "EVENT").toUpperCase() === "TRAINING";
@@ -69,9 +82,7 @@ export default function MapPage() {
     findByEventId,
   } = useApplicationStore();
 
-  useEffect(() => {
-    loadMine();
-  }, [loadMine]);
+  useEffect(() => { loadMine(); }, [loadMine]);
 
   // --- Geolocation ---
   useEffect(() => {
@@ -113,22 +124,18 @@ export default function MapPage() {
   const debouncedFetchViewport = (bbox: {
     minLat: number; minLon: number; maxLat: number; maxLon: number;
   }) => {
-    // бек не трогаем, если не достигли порога событий
-    if (zoomRef.current < Z_EVENTS_FETCH) {
-      if (debounceRef.current) {
-        window.clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
+    // не трогаем бэк если не достигнут порог событий или окно слишком большое
+    if (zoomRef.current < Z_EVENTS_FETCH || viewportDiagKm > MAX_EVENTS_VIEW_KM) {
+      if (debounceRef.current) { window.clearTimeout(debounceRef.current); debounceRef.current = null; }
       return;
     }
-    // дедуп «крупных» изменений окна
     const key =
       `${bbox.minLat.toFixed(3)}|${bbox.minLon.toFixed(3)}|${bbox.maxLat.toFixed(3)}|${bbox.maxLon.toFixed(3)}`;
     if (key === lastViewportKeyRef.current) return;
 
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      if (zoomRef.current < Z_EVENTS_FETCH) return; // защитный повторный чек
+      if (zoomRef.current < Z_EVENTS_FETCH || viewportDiagKm > MAX_EVENTS_VIEW_KM) return;
       lastViewportKeyRef.current = key;
       useEventStore.getState().fetchViewport(bbox);
     }, 350);
@@ -203,8 +210,16 @@ export default function MapPage() {
             const loc = e?.location;
             if (loc?.zoom) setZoom(loc.zoom);
 
-            // бек дергаем только если достигли порога событий
-            if (loc?.zoom && loc.zoom >= Z_EVENTS_FETCH) {
+            // вычисляем диагональ текущих bounds
+            let diag = viewportDiagKm;
+            if (Array.isArray(loc?.bounds)) {
+              const [[minLng, minLat], [maxLng, maxLat]] = loc.bounds as [[number,number],[number,number]];
+              diag = kmBetween([minLng, minLat], [maxLng, maxLat]);
+              setViewportDiagKm(diag);
+            }
+
+            // бек дергаем только если достигли порога событий И окно не гигантское
+            if (loc?.zoom && loc.zoom >= Z_EVENTS_FETCH && diag <= MAX_EVENTS_VIEW_KM) {
               const b = loc?.bounds;
               if (b) handleBounds(b);
             } else {
@@ -229,21 +244,28 @@ export default function MapPage() {
           const coords: LngLat = [e.locationLon as number, e.locationLat as number];
           const isTraining = (e.kind || "EVENT").toUpperCase() === "TRAINING";
 
-          // рендерим только когда достигнут соответствующий порог
-          if (isTraining && zoom < Z_TRAININGS_FETCH) return null;
-          if (!isTraining && zoom < Z_EVENTS_FETCH) return null;
+          // отсечки по зуму + физическому размеру окна
+          if (isTraining) {
+            if (zoom < Z_TRAININGS_FETCH) return null;
+            if (viewportDiagKm > MAX_TRAININGS_VIEW_KM) return null;
+          } else {
+            if (zoom < Z_EVENTS_FETCH) return null;
+            // (опц.) для событий можно не ограничивать по км
+          }
 
           const hasApp = Boolean(findByEventId(e.id));
           const active = selected?.e.id === e.id;
 
-          // Бейджи «автоматически при зуме»: показываем их вместе с маркерами
-          const showMini = !active && (isTraining ? zoom >= Z_TRAININGS_FETCH : zoom >= Z_EVENTS_FETCH);
+          // мини-бейдж показываем синхронно с маркером
+          const showMini = !active && (isTraining
+            ? (zoom >= Z_TRAININGS_FETCH && viewportDiagKm <= MAX_TRAININGS_VIEW_KM)
+            : (zoom >= Z_EVENTS_FETCH));
 
           const title = e.title;
           const subtitle =
             `${e.kind === "TRAINING" ? "Тренировка" : "Событие"} • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
 
-          // --- размеры пина (как в CSS), и припуск для ауры ---
+          // размеры
           const PIN  = isTraining ? 34 : 52;
           const TAIL = isTraining ?  9 : 12;
           const HALO = isTraining ?  0 : 12;
@@ -281,11 +303,7 @@ export default function MapPage() {
                 >
                   {/* АУРА — только для событий */}
                   {!isTraining && (
-                    <span
-                      className={`sl-aura ${active ? "sl-aura--active" : ""}`}
-                      style={auraStyle}
-                      aria-hidden="true"
-                    />
+                    <span className={`sl-aura ${active ? "sl-aura--active" : ""}`} style={auraStyle} aria-hidden="true" />
                   )}
 
                   {/* РОМБОВЫЕ ВОЛНЫ — только для событий */}
@@ -308,7 +326,7 @@ export default function MapPage() {
                     <span className="sl-band" />
                   </div>
 
-                  {/* мини-лейбл (автопоказ при зуме — синхронно с маркерами) */}
+                  {/* мини-лейбл */}
                   {showMini && (
                     <div
                       className={`sl-badge ${!isTraining ? "sl-badge--event" : ""}`}
@@ -324,7 +342,7 @@ export default function MapPage() {
                     </div>
                   )}
 
-                  {/* POPUP (по клику) */}
+                  {/* POPUP */}
                   {active && (
                     <div className="sl-popover" onClick={(ev) => ev.stopPropagation()}>
                       <PopupCard
