@@ -1,3 +1,4 @@
+// src/pages/map/MapPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEventStore } from "@/entities/event/store";
@@ -89,7 +90,9 @@ export default function MapPage() {
   // ==== СТАЛО: открываем модалку с фиксированным типом и координатами точки.
   const openCreate = (kind: "EVENT" | "TRAINING", lat: number, lon: number) => {
     if (!isAuthed) { navigate("/auth/login"); return; }
-    setCreateState({ kind, coords: [lon, lat] }); // [lon, lat]
+    const coords: LngLat = [lon, lat];
+    console.info("[Map] openCreate →", { kind, lat, lon, coordsLngLat: coords });
+    setCreateState({ kind, coords }); // [lon, lat]
     setCtxMenu(null);
   };
 
@@ -114,7 +117,14 @@ export default function MapPage() {
     const y = e.clientY - rect.top;
     
     // Гео возьмём из последнего YMapListener, иначе центр (как было)
-    const coords = lastGeoRef.current ?? [location.center[0], location.center[1]] as [number, number];
+    const fallback = [location.center[0], location.center[1]] as [number, number];
+    const coords = (lastGeoRef.current ?? fallback) as [number, number];
+
+    console.info("[Map] container onContextMenu", {
+      screen: { x, y },
+      geoFrom: lastGeoRef.current ? "YMapListener" : "centerFallback",
+      coordsLngLat: coords,
+    });
 
     setCtxMenu({
       coords,
@@ -223,13 +233,23 @@ export default function MapPage() {
               lastGeoRef.current = c as [number, number]; // кеш точных geo
               if (containerRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
+                const screenX = e.originalEvent.clientX - rect.left;
+                const screenY = e.originalEvent.clientY - rect.top;
+
+                console.info("[Map] YMapListener onContextMenu", {
+                  geoLngLat: c,
+                  screen: { x: screenX, y: screenY },
+                });
+
                 setCtxMenu({
                   coords: c as [number, number],
-                  screenX: e.originalEvent.clientX - rect.left,
-                  screenY: e.originalEvent.clientY - rect.top
+                  screenX,
+                  screenY
                 });
                 setSelected(null);
               }
+            } else {
+              console.warn("[Map] YMapListener onContextMenu: no coordinates in event", e);
             }
           }}
         />
