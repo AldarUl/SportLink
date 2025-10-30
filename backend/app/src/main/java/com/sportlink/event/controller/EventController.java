@@ -38,10 +38,7 @@ public class EventController {
     @PostMapping
     public EventResponse create(@RequestBody @Valid EventCreateRequest req, Authentication auth) {
         UUID me = currentUserId(auth);
-        if (!me.equals(req.organizerId())) {
-            throw new IllegalArgumentException("OrganizerId must be current user");
-        }
-        return eventService.create(req);
+        return eventService.create(req, me);
     }
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Детали события")

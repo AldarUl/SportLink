@@ -12,7 +12,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public interface EventService {
-    EventResponse create(EventCreateRequest req);
+    EventResponse create(EventCreateRequest req, UUID organizerId);
 
     EventResponse get(UUID id, UUID viewerId);
     default EventResponse get(UUID id) { return get(id, null); }

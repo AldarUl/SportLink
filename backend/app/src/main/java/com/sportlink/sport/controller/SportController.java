@@ -18,7 +18,8 @@ public class SportController {
                 new SportResponse("basketball", "Баскетбол"),
                 new SportResponse("boxing", "Бокс"),
                 new SportResponse("volleyball", "Волейбол"),
-                new SportResponse("running", "Бег")
+                new SportResponse("running", "Бег"),
+                new SportResponse("tennis", "Теннис")
         );
     }
 }

@@ -32,17 +32,18 @@ public class EventServiceImpl implements EventService {
     private final NotificationService notificationService;
 
     @Override
-    public EventResponse create(EventCreateRequest r) {
-        // инварианты (как у тебя было)
+    public EventResponse create(EventCreateRequest r, UUID organizerId) {
         if (r.kind() == EventKind.TRAINING && r.admission() != EventAdmission.MANUAL)
             throw new IllegalArgumentException("TRAINING must use MANUAL admission");
         if (r.kind() == EventKind.TRAINING && r.capacity() != null && r.capacity() > 50)
             throw new IllegalArgumentException("TRAINING capacity must be ≤ 50");
+
         if (r.access() == EventAccess.CLUB_ONLY) {
             if (r.clubId() == null) throw new IllegalArgumentException("clubId is required for CLUB_ONLY events");
-            boolean isMember = clubMemberRepository.existsByClubIdAndUserId(r.clubId(), r.organizerId());
+            boolean isMember = clubMemberRepository.existsByClubIdAndUserId(r.clubId(), organizerId);
             if (!isMember) throw new IllegalArgumentException("Organizer must be a club member");
         }
+
         if (r.startsAt() == null || r.startsAt().isBefore(OffsetDateTime.now()))
             throw new IllegalArgumentException("startsAt must be in the future");
         if (r.durationMin() == null || r.durationMin() < 10 || r.durationMin() > 1440)
@@ -63,7 +64,7 @@ public class EventServiceImpl implements EventService {
                 .admission(r.admission())
                 .recurrenceRule(r.recurrenceRule())
                 .registrationDeadline(r.registrationDeadline())
-                .organizerId(r.organizerId())
+                .organizerId(organizerId)
                 .clubId(r.clubId())
                 .locationLat(r.locationLat())
                 .locationLon(r.locationLon())

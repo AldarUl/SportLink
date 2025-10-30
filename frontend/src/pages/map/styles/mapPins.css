@@ -415,3 +415,8 @@
   50%  { box-shadow: 0 0 0 6px rgba(239,68,68,.08); }
   100% { box-shadow: 0 0 0 0   rgba(239,68,68,.18); }
 }
+
+/* ghost preview */
+.sl-pin.ghost { opacity: .65; transform: scale(.9); }
+.sl-pin--event { background: linear-gradient(#ffea9a, #f6c453); }
+.sl-pin--train { background: linear-gradient(#a7c4ff, #4b7be5); }

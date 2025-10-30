@@ -6,22 +6,22 @@ import com.sportlink.club.model.ClubMemberRole;
 import com.sportlink.club.repository.ClubMemberRepository;
 import com.sportlink.club.repository.ClubRepository;
 import com.sportlink.event.dto.EventCreateRequest;
-import com.sportlink.event.model.*;
+import com.sportlink.event.model.EventAccess;
+import com.sportlink.event.model.EventAdmission;
+import com.sportlink.event.model.EventKind;
 import com.sportlink.event.service.EventService;
 import com.sportlink.user.model.Role;
 import com.sportlink.user.model.User;
 import com.sportlink.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.CommandLineRunner;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
-import java.util.UUID;
 
 @Slf4j
 @Component
@@ -56,42 +56,53 @@ public class DevDataSeeder implements CommandLineRunner {
         memberRepo.save(ClubMember.builder().clubId(club.getId()).userId(u3.getId()).role(ClubMemberRole.MEMBER).build());
 
         // events
-        OffsetDateTime base = OffsetDateTime.now(ZoneOffset.UTC).plusDays(1).withHour(18).withMinute(0).withSecond(0).withNano(0);
+        OffsetDateTime base = OffsetDateTime.now(ZoneOffset.UTC)
+                .plusDays(1).withHour(18).withMinute(0).withSecond(0).withNano(0);
 
         // open training (manual)
         eventService.create(new EventCreateRequest(
                 EventKind.TRAINING, "Boxing practice", "boxing", "Pads & sparring",
                 base, 90, 20, true, EventAccess.PUBLIC, EventAdmission.MANUAL,
-                null, base.minusHours(2), u1.getId(), null, 55.75, 37.61
-        ));
+                null, base.minusHours(2),           // recurrenceRule, registrationDeadline
+                null,                               // clubId
+                55.75, 37.61                        // lat, lon
+        ), u1.getId());
 
         // public event (auto)
         eventService.create(new EventCreateRequest(
                 EventKind.EVENT, "City Run 5K", "running", "Fun run",
                 base.plusDays(1), 60, 200, true, EventAccess.PUBLIC, EventAdmission.AUTO,
-                null, base.plusDays(1).minusHours(4), u1.getId(), null, 55.78, 37.60
-        ));
+                null, base.plusDays(1).minusHours(4),
+                null,
+                55.78, 37.60
+        ), u1.getId());
 
         // club-only training (manual)
         eventService.create(new EventCreateRequest(
                 EventKind.TRAINING, "Club Boxing — Sparring", "boxing", "Members only",
                 base.plusDays(2), 120, 16, true, EventAccess.CLUB_ONLY, EventAdmission.MANUAL,
-                null, base.plusDays(2).minusHours(3), u2.getId(), club.getId(), 55.73, 37.59
-        ));
+                null, base.plusDays(2).minusHours(3),
+                club.getId(),
+                55.73, 37.59
+        ), u2.getId());
 
         // public training (manual)
         eventService.create(new EventCreateRequest(
                 EventKind.TRAINING, "Basketball drills", "basketball", "Ball handling",
                 base.plusDays(3), 90, 12, false, EventAccess.PUBLIC, EventAdmission.MANUAL,
-                null, base.plusDays(3).minusHours(2), u3.getId(), null, 55.70, 37.65
-        ));
+                null, base.plusDays(3).minusHours(2),
+                null,
+                55.70, 37.65
+        ), u3.getId());
 
         // big public event (auto)
         eventService.create(new EventCreateRequest(
                 EventKind.EVENT, "Spartakiada 2025", "multi", "Multi-sport festival",
                 base.plusDays(7), 240, 1000, true, EventAccess.PUBLIC, EventAdmission.AUTO,
-                null, base.plusDays(7).minusDays(1), u2.getId(), null, 55.80, 37.50
-        ));
+                null, base.plusDays(7).minusDays(1),
+                null,
+                55.80, 37.50
+        ), u2.getId());
 
         log.info("DevDataSeeder: done.");
     }

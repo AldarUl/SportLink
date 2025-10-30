@@ -21,7 +21,6 @@ public record EventCreateRequest(
         @NotNull EventAdmission admission,
         String recurrenceRule,
         OffsetDateTime registrationDeadline,
-        @NotNull UUID organizerId,
         UUID clubId,
         Double locationLat,
         Double locationLon
