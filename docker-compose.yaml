@@ -1,67 +1,36 @@
-version: '3.9'
-
 services:
-  # --- инфраструктура ---
-  postgres:
+  db:
     image: postgres:16
-    env_file: [.env]
-    volumes: [postgres-data:/var/lib/postgresql/data]
-    ports: ['5432:5432']
-
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
     environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-    ports: ['9200:9200']
-
-  # --- backend (микросервисы) ---
-  auth-service:
-    build: ./backend/auth-service
-    ports: ['8081:8080']
-    env_file: [.env]
-    depends_on: [postgres]
-
-  user-service:
-    build: ./backend/user-service
-    ports: ['8082:8080']
-    env_file: [.env]
-    depends_on: [postgres]
-
-  training-service:
-    build: ./backend/training-service
-    ports: ['8083:8080']
-    env_file: [.env]
-    depends_on: [postgres]
-
-  search-service:
-    build: ./backend/search-service
-    ports: ['8084:8080']
-    env_file: [.env]
-    depends_on: [elasticsearch]
-
-  gateway:
-    build: ./backend/gateway
-    ports: ['8080:8080']
-    env_file: [.env]
-    depends_on:
-      - auth-service
-      - user-service
-      - training-service
-      - search-service
-
-  # --- frontend ---
-  web:
-    build: ./frontend/web-app         # Node build → Nginx serve
-    ports: ['3000:80']
-    depends_on: [gateway]             # web ходит на gateway
-
-  # --- Telegram-бот ---
-  telegram-bot:
-    build: ./bots/telegram-bot
-    env_file: [.env]
-    depends_on: [gateway]
+      POSTGRES_DB: sportlink
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U postgres -d sportlink"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
 
-volumes:
-  postgres-data:
+  maildev:
+    image: maildev/maildev:latest
+    ports: ["1080:1080", "1025:1025"]
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ./backend/app
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: dev             # чтобы сидер отработал
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sportlink
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: password
+      SECURITY_JWT_SECRET: change-me-very-long-random-secret-32b-min
+      SECURITY_JWT_EXPIRATIONMS: 86400000
+    ports: ["8080:8080"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped

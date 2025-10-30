@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: sportlink-app
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/sportlink}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+management:
+  endpoints.web.exposure.include: health,info,metrics,prometheus
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+security:
+  jwt:
+    secret: ${SECURITY_JWT_SECRET:dev-secret-should-be-very-long}
+    accessTtlMinutes: 15
+    refreshTtlDays: 30
+    issuer: sportlink
+  refreshCookie:
+    name: refreshToken
+    path: /api/v1/auth/refresh
+    sameSite: Strict
+    secure: true

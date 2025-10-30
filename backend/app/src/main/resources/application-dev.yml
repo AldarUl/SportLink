@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sportlink
+    username: postgres
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.sportlink: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+
+server:
+  error:
+    include-message: always
+    include-binding-errors: always
+    include-stacktrace: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,threaddump,httpexchanges
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: sportlink-app

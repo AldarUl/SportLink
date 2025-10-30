@@ -1,0 +1,18 @@
+spring:
+  profiles: prod
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus   # если Prometheus не нужен — оставь только health
+  endpoint:
+    health:
+      show-details: never
+
+# впиши реальные домены фронта:
+security:
+  cors:
+    allowed-origins:
+      - https://app.sportlink.example
+      - https://admin.sportlink.example
