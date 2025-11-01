@@ -17,6 +17,8 @@ import { TrainingMarker } from "./ui/markers/TrainingMarker";
 
 import "./styles/mapPins.css";
 import { CreateEventModal } from "./ui/modals/CreateEventModal";
+import { applicationsByEvent, confirm as apiConfirm, decline as apiDecline } from "@/entities/application/api";
+import { http } from "@/api/http";
 
 /* ===================== helpers ===================== */
 
@@ -69,6 +71,33 @@ function formatTimeLeft(startIso: string | Date) {
   return `${past ? "Прошло" : "До начала"} ${parts.join(" ")}`;
 }
 
+/* === User name inline (+axios cache) === */
+type UserProfile = { id: string; email?: string; displayName?: string };
+const userCache = new Map<string, UserProfile>();
+async function loadUserProfile(userId: string): Promise<UserProfile | null> {
+  try {
+    if (userCache.has(userId)) return userCache.get(userId)!;
+    const { data } = await http.get(`/user/${userId}`);
+    userCache.set(userId, data);
+    return data;
+  } catch (e) {
+    console.warn("loadUserProfile failed", e);
+    return null;
+  }
+}
+function UserInline({ userId }: { userId: string }) {
+  const [p, setP] = React.useState<UserProfile | null>(userCache.get(userId) || null);
+  React.useEffect(() => {
+    let dead = false;
+    if (!userCache.has(userId)) {
+      loadUserProfile(userId).then((u) => { if (!dead && u) setP(u); });
+    }
+    return () => { dead = true; };
+  }, [userId]);
+  const name = p?.displayName || p?.email || `Пользователь ${userId.slice(0, 8)}`;
+  return <Link to={`/profile/${userId}`} className="text-sm font-medium hover:underline">{name}</Link>;
+}
+
 /* ===================== small atoms ===================== */
 
 function Pill({ children }: { children: React.ReactNode }) {
@@ -103,9 +132,20 @@ function MyTrainingsPanel({
   };
 
   return (
-    <aside className="absolute left-3 top-3 bottom-3 z-30 w-[360px] max-w-[40vw] overflow-hidden rounded-2xl bg-white/95 shadow-xl backdrop-blur">
-      <SectionTitle>Мои ближайшие тренировки</SectionTitle>
-      <div className="h-full overflow-y-auto px-3 pb-4 pt-2">
+<aside
+  className="
+    absolute left-3 top-3 z-30
+    w-[360px] max-w-[40vw]
+    inline-flex flex-col
+    overflow-hidden rounded-2xl
+    bg-white/95 shadow-xl backdrop-blur
+    max-h-[calc(100vh-24px)]   /* не выше экрана, с учётом отступов */
+  "
+>
+  <div className="border-b px-4 py-3 text-sm font-semibold shrink-0">
+    Мои ближайшие тренировки
+  </div>
+  <div className="overflow-y-auto px-3 pb-4 pt-2">  {/* без h-full */}
         {!mine?.length && (
           <div className="m-3 rounded-lg border px-3 py-2 text-sm text-gray-600">Пока нет записей.</div>
         )}
@@ -114,7 +154,6 @@ function MyTrainingsPanel({
           const e: any = a.event;
           const when = e.startsAt || e.startDate || e.date;
           const timeLeft = when ? formatTimeLeft(when) : null;
-          // по Swagger у EventResponse есть только organizerId
           const orgId = e.organizerId || e.organizer?.id;
 
           return (
@@ -172,68 +211,93 @@ function MyTrainingsPanel({
 
 /* ===================== RIGHT: Я организатор ===================== */
 
-type ApplicationDTO = {
+type AppRow = {
   id: string;
   userId: string;
   eventId: string;
-  status: "PENDING" | "CONFIRMED" | "DECLINED" | "WAITLISTED";
+  status: "PENDING" | "CONFIRMED" | "DECLINED" | "WAITLISTED" | string;
 };
 
-async function listAppsByEvent(eventId: string, page = 0, size = 50): Promise<ApplicationDTO[]> {
-  const q = new URLSearchParams({ page: String(page), size: String(size) }).toString();
-  const res = await fetch(`/api/v1/application/by-event/${eventId}?` + q, { credentials: "include" });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  return data?.content || []; // ApplicationPage.content
-}
-async function confirmApp(appId: string) {
-  const r = await fetch(`/api/v1/application/${appId}/confirm`, { method: "POST", credentials: "include" });
-  if (!r.ok) throw new Error(await r.text());
-}
-async function declineApp(appId: string) {
-  const r = await fetch(`/api/v1/application/${appId}/decline`, { method: "POST", credentials: "include" });
-  if (!r.ok) throw new Error(await r.text());
-}
+function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
+  const [appsByEvent, setAppsByEvent] = useState<Record<string, AppRow[]>>({});
+  const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({});
+  const [loadingEvent, setLoadingEvent] = useState<Record<string, boolean>>({});
+  const [rowPending, setRowPending] = useState<Record<string, boolean>>({});
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({});
 
-function OrganizerPanel({
-  myEvents,
-}: {
-  myEvents: AppEvent[];
-}) {
-  const [appsByEvent, setAppsByEvent] = useState<Record<string, ApplicationDTO[]>>({});
-  const [pending, setPending] = useState<Record<string, boolean>>({});
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  // Компаратор
+  const sortApps = (items: AppRow[]) =>
+    [...items].sort((a, b) => Number(b.status === "PENDING") - Number(a.status === "PENDING"));
 
-  const loadApps = useCallback(async (eventId: string) => {
+  // 👇 новое: лёгкая подгрузка только количества (totalElements)
+  const loadCount = useCallback(async (eventId: string) => {
     try {
-      setPending((p) => ({ ...p, [eventId]: true }));
-      const items = await listAppsByEvent(eventId);
-      setAppsByEvent((m) => ({ ...m, [eventId]: items }));
-      setOpen((o) => ({ ...o, [eventId]: true }));
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setPending((p) => ({ ...p, [eventId]: false }));
+      // берём минимальный размер страницы — в нашей обёртке всё равно вернётся totalElements
+      const page = await applicationsByEvent(eventId, 0, 1);
+      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
+    } catch {
+      // в случае ошибки не перетираем; можно поставить 0 или оставить undefined
     }
   }, []);
 
-  const act = useCallback(
-    async (appId: string, action: "confirm" | "decline", eventId: string) => {
-      try {
-        if (action === "confirm") await confirmApp(appId);
-        else await declineApp(appId);
-        await loadApps(eventId);
-      } catch (e) {
-        console.warn(e);
-      }
-    },
-    [loadApps]
-  );
+  // 👇 новое: когда список моих событий меняется — подтянуть счётчики там, где их ещё нет
+  useEffect(() => {
+    const ids = (myEvents || []).map((e: any) => String(e.id)).filter(Boolean);
+    const missing = ids.filter((id) => counts[id] === undefined);
+    if (!missing.length) return;
+    // мягко параллелим; если событий много — можно батчить
+    missing.forEach((id) => { loadCount(id); });
+  }, [myEvents, counts, loadCount]);
+
+  const reload = useCallback(async (eventId: string) => {
+    setErrors((m) => ({ ...m, [eventId]: null }));
+    setLoadingEvent((p) => ({ ...p, [eventId]: true }));
+    try {
+      const page = await applicationsByEvent(eventId, 0, 50);
+      setAppsByEvent((m) => ({ ...m, [eventId]: sortApps(page.content as AppRow[]) }));
+      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) })); // 👈 обновили счётчик
+      setPanelOpen((o) => ({ ...o, [eventId]: true }));
+    } catch (e: any) {
+      setErrors((m) => ({ ...m, [eventId]: e?.response?.data?.message || e?.message || "Не удалось загрузить заявки" }));
+      setPanelOpen((o) => ({ ...o, [eventId]: true }));
+    } finally {
+      setLoadingEvent((p) => ({ ...p, [eventId]: false }));
+    }
+  }, []);
+
+  const act = useCallback(async (appId: string, action: "confirm" | "decline", eventId: string) => {
+    setRowPending((rp) => ({ ...rp, [appId]: true }));
+    try {
+      if (action === "confirm") await apiConfirm(appId);
+      else await apiDecline(appId);
+      const page = await applicationsByEvent(eventId, 0, 50);
+      setAppsByEvent((m) => ({ ...m, [eventId]: sortApps(page.content as AppRow[]) }));
+      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) })); // 👈 держим в синхроне
+    } catch (e: any) {
+      setErrors((m) => ({ ...m, [eventId]: e?.response?.data?.message || e?.message || "Операция не удалась" }));
+    } finally {
+      setRowPending((rp) => ({ ...rp, [appId]: false }));
+    }
+  }, []);
 
   return (
-    <aside className="absolute right-3 top-3 bottom-3 z-30 w-[380px] max-w-[42vw] overflow-hidden rounded-2xl bg-white/95 shadow-xl backdrop-blur">
-      <SectionTitle>Я организатор</SectionTitle>
-      <div className="h-full overflow-y-auto px-3 pb-4 pt-2">
+    <aside
+      className="
+        absolute right-3 top-3 z-30
+        w-[380px] max-w-[42vw]
+        inline-flex flex-col
+        overflow-hidden rounded-2xl
+        bg-white/95 shadow-xl backdrop-blur
+        max-h-[calc(100vh-24px)]   /* ← ограничиваем по высоте экрана */
+      "
+    >
+      <div className="border-b px-4 py-3 text-sm font-semibold shrink-0">
+        Я организатор
+      </div>
+
+      {/* было: h-full overflow-y-auto ...  */}
+      <div className="overflow-y-auto px-3 pb-4 pt-2">
         {!myEvents?.length && (
           <div className="m-3 rounded-lg border px-3 py-2 text-sm text-gray-600">
             Событий, где вы организатор, в зоне карты нет.
@@ -241,9 +305,13 @@ function OrganizerPanel({
         )}
 
         {myEvents?.map((e: any) => {
-          const evId = e.id;
-          const count = appsByEvent[evId]?.length || 0;
-          const loading = pending[evId];
+          const evId = e.id as string;
+          const opened  = panelOpen[evId];
+          const loading = loadingEvent[evId];
+          const err     = errors[evId];
+          const apps    = appsByEvent[evId] || [];
+          const count = counts[evId] ?? (apps?.length ?? 0); // если ещё не загрузили count — подстрахуемся локальным списком
+
           return (
             <div key={evId} className="mb-3 rounded-xl border p-3 shadow-sm">
               <div className="mb-1 flex items-start justify-between gap-2">
@@ -260,25 +328,38 @@ function OrganizerPanel({
                 </Link>
               </div>
 
-              <button
-                className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
-                onClick={() => (open[evId] ? setOpen({ ...open, [evId]: false }) : loadApps(evId))}
-              >
-                {loading ? "Загрузка..." : open[evId] ? "Скрыть заявки" : `Показать заявки (${count})`}
-              </button>
+                <button
+                  className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                  onClick={() => (opened ? setPanelOpen({ ...panelOpen, [evId]: false }) : reload(evId))}
+                >
+                  {loading ? "Загрузка..." : opened ? "Скрыть заявки" : `Показать заявки (${count ?? "…"})`}
+                </button>
 
-              {open[evId] && appsByEvent[evId] && (
+              {opened && (
                 <div className="space-y-2">
-                  {appsByEvent[evId].map((a) => (
+                  {err && (
+                    <div className="rounded-md border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700">
+                      {err}
+                    </div>
+                  )}
+
+                  {!err && !apps.length && (
+                    <div className="rounded-md border px-2 py-2 text-xs text-gray-600">Пока нет заявок.</div>
+                  )}
+
+                {!err && apps.map((a) => {
+                  const isPending   = a.status === "PENDING";
+                  const isConfirmed = a.status === "CONFIRMED"; // 👈 новое
+                  const disabled    = !!rowPending[a.id];
+
+                  return (
                     <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-2">
                       <div className="leading-tight">
-                        <Link to={`/profile/${a.userId}`} className="text-sm font-medium hover:underline">
-                          Пользователь {a.userId.slice(0, 8)}
-                        </Link>
+                        <UserInline userId={a.userId} />
                         <div className="text-[11px] text-gray-500">Статус: {a.status}</div>
                       </div>
+
                       <div className="flex items-center gap-2">
-                        {/* Реальная заглушка чата: стабильный URL, чтобы потом не менять фронт */}
                         <Link
                           to={`/chat?peerId=${a.userId}&eventId=${evId}`}
                           className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
@@ -286,25 +367,41 @@ function OrganizerPanel({
                           Чат
                         </Link>
 
-                        {a.status === "PENDING" && (
+                        {isPending && (
                           <>
                             <button
-                              className="rounded-md bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100"
+                              disabled={disabled}
+                              className={`rounded-md px-2 py-1 text-xs ${disabled ? "opacity-50 cursor-not-allowed bg-emerald-50 text-emerald-700" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
                               onClick={() => act(a.id, "confirm", evId)}
                             >
                               Подтвердить
                             </button>
                             <button
-                              className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+                              disabled={disabled}
+                              className={`rounded-md px-2 py-1 text-xs ${disabled ? "opacity-50 cursor-not-allowed bg-red-50 text-red-600" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
                               onClick={() => act(a.id, "decline", evId)}
                             >
                               Отклонить
                             </button>
                           </>
                         )}
+
+                        {/* 👇 новое: «удалить из тренировки» для подтверждённых */}
+                        {isConfirmed && (
+                          <button
+                            disabled={disabled}
+                            title="Исключить участника (перевести в DECLINED)"
+                            className={`rounded-md px-2 py-1 text-xs ${disabled ? "opacity-50 cursor-not-allowed bg-gray-50 text-gray-700" : "bg-gray-50 text-gray-700 hover:bg-gray-100"}`}
+                            onClick={() => act(a.id, "decline", evId)}
+                          >
+                            Исключить
+                          </button>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
+
                 </div>
               )}
             </div>
@@ -348,13 +445,59 @@ function DragDock({
     </div>
   );
 
+  // Круглая иконка "Моё место"
+  const CircleIconBtn = ({
+    title,
+    onClick,
+    children,
+  }: {
+    title: string;
+    onClick: () => void;
+    children: React.ReactNode;
+  }) => (
+    <div className="flex w-[96px] flex-col items-center">
+      <button
+        onClick={onClick}
+        title={title}
+        aria-label={title}
+        className="group flex h-14 w-14 items-center justify-center rounded-full border bg-white shadow-md transition hover:bg-gray-50 active:scale-95"
+      >
+        {/* Нав-стрелка (как в картах), слегка повёрнута на 45° */}
+        <svg
+          viewBox="0 0 24 24"
+          className="h-6 w-6 text-blue-600 transition-transform group-hover:rotate-12 group-active:scale-90"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          {/* форма как у Feather `navigation` но с заливкой */}
+          <path d="M12 2l7 19-7-4-7 4 7-19z" />
+        </svg>
+      </button>
+      <div className="mt-1 text-center text-[11px] text-gray-700">{title}</div>
+    </div>
+  );
+
   return (
-    <div className="absolute bottom-3 left-3 z-30 rounded-2xl border bg-white/95 px-3 py-2 shadow-xl backdrop-blur">
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 rounded-2xl border bg-white/95 px-3 py-2 shadow-xl backdrop-blur">
       <div className="flex items-end gap-4">
-        <CircleBtn label="E" sub="Создать событие (drag)" bg="bg-amber-500" onDragStart={(e: any) => onDragStart(e, "EVENT")} />
-        <CircleBtn label="T" sub="Создать тренировку (drag)" bg="bg-blue-600" onDragStart={(e: any) => onDragStart(e, "TRAINING")} />
+        <CircleBtn
+          label="E"
+          sub="Создать событие (drag)"
+          bg="bg-amber-500"
+          onDragStart={(e: any) => onDragStart(e, "EVENT")}
+        />
+        <CircleBtn
+          label="T"
+          sub="Создать тренировку (drag)"
+          bg="bg-blue-600"
+          onDragStart={(e: any) => onDragStart(e, "TRAINING")}
+        />
+
         <div className="ml-2 h-10 w-px bg-gray-200" />
-        <button onClick={onRecenter} className="rounded-full border px-3 py-2 text-xs hover:bg-gray-50">Моё место</button>
+
+        <CircleIconBtn title="Моё место" onClick={onRecenter}>
+          {/* svg внутри CircleIconBtn выше */}
+        </CircleIconBtn>
       </div>
     </div>
   );
@@ -402,45 +545,27 @@ export default function MapPage() {
     await withdrawByEvent(id);
   };
 
-// ...существующие импорты
+  // === OS-like закрытие контекстного меню
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      setCtxMenu(null);
+    };
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setCtxMenu(null); };
+    const handleVisibility = () => { if (document.visibilityState === "hidden") setCtxMenu(null); };
 
-// внутри компонента MapPage():
-const menuRef = useRef<HTMLDivElement | null>(null);
+    window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    document.addEventListener("visibilitychange", handleVisibility);
 
-// Закрывать меню на любой клик/тап вне меню и по Esc
-useEffect(() => {
-  if (!ctxMenu) return;
-
-  const handlePointerDown = (e: PointerEvent) => {
-    // если кликнули внутри меню — не закрываем здесь (пусть обработается кнопкой)
-    if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
-    setCtxMenu(null);
-  };
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") setCtxMenu(null);
-  };
-
-  // максимально ранняя фаза — сразу при pointerdown
-  window.addEventListener("pointerdown", handlePointerDown, { capture: true });
-  window.addEventListener("keydown", handleKeyDown, { capture: true });
-
-  // Дополнительно: если вкладка теряет фокус — закрыть
-  const handleVisibility = () => { if (document.visibilityState === "hidden") setCtxMenu(null); };
-  document.addEventListener("visibilitychange", handleVisibility);
-
-  return () => {
-    window.removeEventListener("pointerdown", handlePointerDown, { capture: true } as any);
-    window.removeEventListener("keydown", handleKeyDown, { capture: true } as any);
-    document.removeEventListener("visibilitychange", handleVisibility);
-  };
-}, [ctxMenu]);
-
-
-
-
-
-
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, { capture: true } as any);
+      window.removeEventListener("keydown", handleKeyDown, { capture: true } as any);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [ctxMenu]);
 
   useEffect(() => {
     if (selected && !events.some((x) => x.id === selected.e.id)) setSelected(null);
@@ -544,10 +669,10 @@ useEffect(() => {
         >
           <div className="flex flex-col gap-1">
             <button
-            onClick={() => {
-              setCreateState({ kind: "EVENT", coords: ctxMenu.coords });
-              setCtxMenu(null);                         // ← закрыть сразу
-            }}
+              onClick={() => {
+                setCreateState({ kind: "EVENT", coords: ctxMenu.coords });
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-md"
             >
               Создать событие здесь
@@ -555,7 +680,7 @@ useEffect(() => {
             <button
               onClick={() => {
                 setCreateState({ kind: "TRAINING", coords: ctxMenu.coords });
-                setCtxMenu(null);                         // ← закрыть сразу
+                setCtxMenu(null);
               }}
               className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-md"
             >
