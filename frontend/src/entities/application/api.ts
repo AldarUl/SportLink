@@ -4,24 +4,21 @@ import type { Application, ApplicationStatus, Page } from "./types";
 
 function norm(a: any): Application {
   return {
-    id: String(a.id),
-    eventId: String(a.eventId ?? a.event_id),
-    userId: String(a.userId ?? a.user_id),
+    id: String(a.id).toLowerCase(),
+    eventId: String(a.eventId ?? a.event_id).toLowerCase(),
+    userId: String(a.userId ?? a.user_id).toLowerCase(),
     status: (a.status ?? "PENDING") as ApplicationStatus,
-    createdAt: a.createdAt ?? a.created_at ?? undefined,
   };
 }
-
-// === ИМЕНОВАННЫЕ ЭКСПОРТЫ ===
 
 export async function apply(eventId: string): Promise<Application> {
   const { data } = await http.post("/application", { eventId });
   return norm(data);
 }
 
-export async function withdraw(applicationId: string): Promise<void | Application> {
-  const { data } = await http.post(`/application/${applicationId}/withdraw`);
-  return data ? norm(data) : undefined;
+export async function withdraw(applicationId: string): Promise<void> {
+  // сервер возвращает пустое тело — просто ждём 200 OK
+  await http.post(`/application/${applicationId}/withdraw`);
 }
 
 export async function confirm(applicationId: string): Promise<Application> {

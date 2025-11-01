@@ -1,3 +1,4 @@
+// src/pages/map/ui/overlays/MyTrainingsSheet.tsx
 import React from "react";
 import type { LngLat } from "../../lib/geo";
 import { formatDateTime, openRouteExternal } from "../../lib/fmt";
@@ -7,18 +8,32 @@ export function MyTrainingsSheet({
 }: {
   mine: any[];
   myPos: LngLat | null;
-  onWithdraw: (eventId: string) => void;
+  onWithdraw: (eventId: string) => Promise<void>;
 }) {
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+
+  const items = mine
+    .filter(a =>
+      a.event &&
+      (a.status === "CONFIRMED" || a.status === "PENDING") &&
+      a.event.status !== "CANCELLED"
+    )
+    .sort((a, b) => new Date(a.event!.startsAt).getTime() - new Date(b.event!.startsAt).getTime())
+    .slice(0, 3);
+
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 mx-auto w-[min(960px,95%)]">
       <div className="pointer-events-auto rounded-2xl bg-white/95 p-3 shadow-xl">
         <div className="mb-2 text-sm font-semibold text-gray-700">Мои ближайшие тренировки</div>
+
         <div className="flex flex-wrap gap-3">
-          {mine
-            .filter(a => a.event && (a.status === "CONFIRMED" || a.status === "PENDING"))
-            .sort((a, b) => new Date(a.event!.startsAt).getTime() - new Date(b.event!.startsAt).getTime())
-            .slice(0, 3)
-            .map((a) => (
+          {items.map((a) => {
+            const to: LngLat | null =
+              a.event?.locationLat != null && a.event?.locationLon != null
+                ? [a.event.locationLon!, a.event.locationLat!]
+                : null;
+
+            return (
               <div key={a.id} className="flex min-w-[260px] flex-1 items-center justify-between rounded-xl border px-3 py-2">
                 <div>
                   <div className="font-medium">{a.event?.title ?? "Тренировка"}</div>
@@ -27,28 +42,33 @@ export function MyTrainingsSheet({
                 </div>
                 <div className="flex gap-2">
                   <button
-                    className="rounded-md border px-2 py-1 text-xs"
-                    onClick={() => {
-                      const to: LngLat | null =
-                        a.event?.locationLat != null && a.event?.locationLon != null
-                          ? [a.event.locationLon!, a.event.locationLat!]
-                          : null;
-                      if (to) openRouteExternal(myPos ?? undefined, to);
-                    }}
+                    className="rounded-md border px-2 py-1 text-xs disabled:opacity-50"
+                    disabled={!to}
+                    onClick={() => { if (to) openRouteExternal(myPos ?? undefined, to); }}
                   >
                     Маршрут
                   </button>
                   <button
-                    className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700"
-                    onClick={() => a.event && onWithdraw(a.event.id)}
+                    className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700 disabled:opacity-50"
+                    disabled={busyId === a.event?.id}
+                    onClick={async () => {
+                      if (!a.event) return;
+                      setBusyId(a.event.id);
+                      try { await onWithdraw(a.event.id); }
+                      finally { setBusyId(null); }
+                    }}
                   >
-                    Отозвать
+                    {busyId === a.event?.id ? "Отзыв…" : "Отозвать"}
                   </button>
                 </div>
               </div>
-            ))}
+            );
+          })}
         </div>
-        <div className="mt-1 text-[11px] text-gray-500">* максимум 3 активные тренировки без пересечений по времени</div>
+
+        <div className="mt-1 text-[11px] text-gray-500">
+          * максимум 3 активные тренировки без пересечений по времени
+        </div>
       </div>
     </div>
   );

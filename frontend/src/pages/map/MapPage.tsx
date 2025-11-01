@@ -120,11 +120,18 @@ export default function MapPage() {
     await withdrawByEvent(id);
   };
 
-  // только с координатами
+  // только ивенты с координатами И не CANCELLED
   const markers = useMemo(
-    () => (events as AppEvent[]).filter((e) => e.locationLat != null && e.locationLon != null),
+    () =>
+      (events as AppEvent[]).filter(
+        (e) =>
+          e.status !== "CANCELLED" &&
+          e.locationLat != null &&
+          e.locationLon != null
+      ),
     [events]
   );
+
 
   // drag image (чтобы курсор не прилипал к кнопке)
   const setNiceDragImage = (e: React.DragEvent, label = "•") => {

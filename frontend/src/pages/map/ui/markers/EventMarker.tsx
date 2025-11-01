@@ -4,6 +4,8 @@ import type { LngLat } from "../../lib/geo";
 import { formatDateTime } from "../../lib/fmt";
 import { PopupCard } from "../PopupCard";
 
+
+
 export function EventMarker({
   YMapMarker,
   e,

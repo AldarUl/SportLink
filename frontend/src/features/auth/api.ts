@@ -7,7 +7,14 @@ export async function login(email: string, password: string) {
   const token = data?.accessToken ?? data?.token;
   if (!token) throw new Error("No access token in response");
   useAuthStore.getState().setTokens({ accessToken: token, refreshToken: null });
-  return data;
+
+  // ⬇️ сразу подтягиваем профиль
+  try {
+    const me = await fetchMe();
+    return { ...data, me };
+  } catch {
+    return data;
+  }
 }
 
 export async function register(payload: { displayName: string; email: string; password: string }) {
@@ -21,7 +28,6 @@ export async function fetchMe() {
   useAuthStore.getState().setUser(u);
   return u;
 }
-
 
 export async function logout() {
   try { await http.post("/auth/logout"); } catch {}

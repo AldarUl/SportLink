@@ -3,6 +3,9 @@ import type { Event as AppEvent } from "@/entities/event/types";
 import type { LngLat } from "../../lib/geo";
 import { formatDateTime } from "../../lib/fmt";
 import { PopupCard } from "../PopupCard";
+import ApplyWithdrawButton from "../balloons/ApplyWithdrawButton";
+
+
 
 export function TrainingMarker({
   YMapMarker,

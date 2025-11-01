@@ -1,20 +1,24 @@
-import React from "react";
+import React, { useState } from "react";
 import type { Event as AppEvent } from "@/entities/event/types";
 import type { LngLat } from "../lib/geo";
 import { formatDateTime, openRouteExternal } from "../lib/fmt";
+import ApplyWithdrawButton from "./balloons/ApplyWithdrawButton";
+import { useAuthStore } from "@/features/auth/store";
+import { http } from "@/api/http";
 
 export function PopupCard({
-  e, myPos, coords, hasApp, onApply, onWithdraw, onClose, onMore,
+  e, myPos, coords, onClose, onMore,
 }: {
   e: AppEvent;
   myPos: LngLat | null;
   coords: LngLat;
-  hasApp: boolean;
-  onApply: (e: AppEvent) => void;
-  onWithdraw: (eventId: string) => void;
   onClose: () => void;
   onMore: () => void;
 }) {
+  const me = useAuthStore(s => s.user);
+  const isOrganizer = !!me && e.organizerId?.toLowerCase?.() === me.id?.toLowerCase?.();
+  const [busy, setBusy] = useState(false);
+
   return (
     <div className="relative w-72 rounded-xl bg-white p-3 shadow-xl border border-neutral-200/60">
       <button
@@ -32,24 +36,37 @@ export function PopupCard({
 
       {e.description && <div className="mt-2 text-[13px]">{e.description}</div>}
 
+      {/* Первая строка — второстепенные кнопки */}
       <div className="mt-3 flex gap-2">
-        <button
-          className="sl-btn"
-          onClick={() => openRouteExternal(myPos ?? undefined, coords)}
-        >
+        <button className="sl-btn" onClick={() => openRouteExternal(myPos ?? undefined, coords)}>
           Маршрут
         </button>
-
-        {!hasApp ? (
-          <button className="sl-btn sl-btn--cta" onClick={() => onApply(e)}>Записаться</button>
-        ) : (
-          <button className="sl-btn sl-btn--danger" onClick={() => onWithdraw(e.id)}>Отозвать</button>
-        )}
-
-
         <button className="sl-btn" onClick={onMore}>
           Подробнее
         </button>
+      </div>
+
+      {/* Вторая строка — большая action-кнопка на всю ширину */}
+      <div className="mt-2">
+        {isOrganizer ? (
+          <button
+            disabled={busy}
+            className="w-full h-10 rounded-xl bg-red-600 text-white disabled:opacity-60"
+            onClick={async () => {
+              try {
+                setBusy(true);
+                await http.delete(`/event/${e.id}`);
+                onClose(); // убрать попап, маркер обновится при следующей подтяжке
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Удалить событие
+          </button>
+        ) : (
+          <ApplyWithdrawButton event={e} fullWidth />
+        )}
       </div>
     </div>
   );
