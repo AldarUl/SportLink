@@ -402,6 +402,46 @@ export default function MapPage() {
     await withdrawByEvent(id);
   };
 
+// ...существующие импорты
+
+// внутри компонента MapPage():
+const menuRef = useRef<HTMLDivElement | null>(null);
+
+// Закрывать меню на любой клик/тап вне меню и по Esc
+useEffect(() => {
+  if (!ctxMenu) return;
+
+  const handlePointerDown = (e: PointerEvent) => {
+    // если кликнули внутри меню — не закрываем здесь (пусть обработается кнопкой)
+    if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+    setCtxMenu(null);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === "Escape") setCtxMenu(null);
+  };
+
+  // максимально ранняя фаза — сразу при pointerdown
+  window.addEventListener("pointerdown", handlePointerDown, { capture: true });
+  window.addEventListener("keydown", handleKeyDown, { capture: true });
+
+  // Дополнительно: если вкладка теряет фокус — закрыть
+  const handleVisibility = () => { if (document.visibilityState === "hidden") setCtxMenu(null); };
+  document.addEventListener("visibilitychange", handleVisibility);
+
+  return () => {
+    window.removeEventListener("pointerdown", handlePointerDown, { capture: true } as any);
+    window.removeEventListener("keydown", handleKeyDown, { capture: true } as any);
+    document.removeEventListener("visibilitychange", handleVisibility);
+  };
+}, [ctxMenu]);
+
+
+
+
+
+
+
   useEffect(() => {
     if (selected && !events.some((x) => x.id === selected.e.id)) setSelected(null);
   }, [events, selected]);
@@ -496,6 +536,7 @@ export default function MapPage() {
       {/* Контекстное меню (ПКМ) */}
       {ctxMenu && (
         <div
+          ref={menuRef}
           className="absolute z-50 bg-white rounded-lg shadow-lg p-2 min-w-[180px]"
           style={{ left: ctxMenu.screenX, top: ctxMenu.screenY }}
           onPointerDown={(e) => e.stopPropagation()}
@@ -503,13 +544,19 @@ export default function MapPage() {
         >
           <div className="flex flex-col gap-1">
             <button
-              onClick={() => setCreateState({ kind: "EVENT", coords: ctxMenu.coords })}
+            onClick={() => {
+              setCreateState({ kind: "EVENT", coords: ctxMenu.coords });
+              setCtxMenu(null);                         // ← закрыть сразу
+            }}
               className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-md"
             >
               Создать событие здесь
             </button>
             <button
-              onClick={() => setCreateState({ kind: "TRAINING", coords: ctxMenu.coords })}
+              onClick={() => {
+                setCreateState({ kind: "TRAINING", coords: ctxMenu.coords });
+                setCtxMenu(null);                         // ← закрыть сразу
+              }}
               className="w-full text-left px-3 py-2 hover:bg-gray-100 rounded-md"
             >
               Создать тренировку здесь
