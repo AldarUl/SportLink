@@ -164,7 +164,7 @@ export async function fetchEventsByBbox(
   }
 }
 
+/** Удаление события */
 export async function deleteEvent(id: string): Promise<void> {
   await http.delete(`/event/${id}`);
 }
-

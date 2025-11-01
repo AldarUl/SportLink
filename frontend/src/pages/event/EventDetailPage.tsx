@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { getEvent, cancelEvent, deleteEvent } from "@/entities/event/api";
+import { getEvent, cancelEvent } from "@/entities/event/api";           // deleteEvent НЕ импортируем
 import type { Event } from "@/entities/event/types";
 import { useEventStore } from "@/entities/event/store";
 import { useAuthStore } from "@/features/auth/store";
@@ -24,9 +24,17 @@ export default function EventDetailPage() {
   // auth (ожидаем, что в сторе есть user?.id; если нет — кнопки просто не появятся)
   const meId = useAuthStore((s: any) => s.user?.id || s.profile?.id || s.me?.id || null);
 
-  // методы стора событий, чтобы карта/список были в консистентном состоянии
-  const upsert = useEventStore(s => s.upsert ?? (() => {}));
-  const remove = useEventStore(s => s.remove ?? (() => {}));
+  // Zustand actions
+  const updateStatus = useEventStore((s) => s.updateStatus);
+  const deleteById   = useEventStore((s) => s.deleteById);
+  const existsInStore = useEventStore((s) => s.events.some((x) => x.id === id));
+
+  // если событие удалили из другого места — уходим со страницы
+  useEffect(() => {
+    if (!loading && !existsInStore) {
+      navigate("/map", { replace: true });
+    }
+  }, [existsInStore, loading, navigate]);
 
   useEffect(() => {
     let ignore = false;
@@ -46,40 +54,34 @@ export default function EventDetailPage() {
     return String(ev.organizerId) === String(meId);
   }, [ev, meId]);
 
-  if (loading) {
-    return <div className="p-6">Загрузка…</div>;
-  }
-  if (!ev) {
-    return <div className="p-6">Событие не найдено.</div>;
-  }
+  if (loading) return <div className="p-6">Загрузка…</div>;
+  if (!ev)      return <div className="p-6">Событие не найдено.</div>;
 
   const statusColor =
     ev.status === "CANCELLED" ? "bg-red-100 text-red-700" :
     ev.status === "PUBLISHED" ? "bg-emerald-100 text-emerald-700" :
     "bg-gray-100 text-gray-700";
 
-    const handleCancel = async () => {
+  const handleCancel = async () => {
     if (!confirm("Отменить событие? Участники больше не смогут записываться.")) return;
     setActing("cancel");
     try {
-        await cancelEvent(ev.id);
-        // локально обновим карточку
-        const updated: Event = { ...ev, status: "CANCELLED" };
-        setEv(updated);
-        // и стор — быстрым методом
-        useEventStore.getState().updateStatus(ev.id, "CANCELLED");
+      await cancelEvent(ev.id);
+      const updated: Event = { ...ev, status: "CANCELLED" };
+      setEv(updated);
+      updateStatus(ev.id, "CANCELLED"); // синхронизируем карту/списки
     } finally {
-        setActing(null);
+      setActing(null);
     }
-    };
+  };
 
+  // ЕДИНАЯ логика удаления — такая же, как в попапе (оптимистично через store.deleteById)
   const handleDelete = async () => {
-    if (!confirm("Удалить черновик безвозвратно?")) return;
+    if (!confirm("Удалить событие безвозвратно?")) return;
     setActing("delete");
     try {
-      await deleteEvent(ev.id);
-      remove(ev.id);
-      navigate("/map", { replace: true });
+      await deleteById(ev.id);              // ← удалит на бэке и сразу уберёт из стора
+      navigate("/map", { replace: true });  // уйдём на карту
     } finally {
       setActing(null);
     }
@@ -124,7 +126,8 @@ export default function EventDetailPage() {
                 </button>
               )}
 
-              {ev.status === "DRAFT" && (
+              {/* Разрешим удаление для DRAFT и CANCELLED (часто нужно убрать отменённые) */}
+              {(ev.status === "DRAFT" || ev.status === "CANCELLED") && (
                 <button
                   disabled={acting === "delete"}
                   onClick={handleDelete}

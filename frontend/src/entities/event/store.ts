@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Event, Bbox as ApiBbox } from "./types";
-import { fetchEventsByBbox, deleteEvent as apiDeleteEvent } from "./api"; // ⬅️ добавить импорт
+import { fetchEventsByBbox, deleteEvent as apiDeleteEvent } from "./api";
 
 type ViewportBbox = { minLat: number; minLon: number; maxLat: number; maxLon: number };
 
@@ -8,17 +8,18 @@ type EventState = {
   events: Event[];
   fetching: boolean;
 
+  // загрузка по текущему вьюпорту
   fetchViewport: (b: ViewportBbox) => Promise<void>;
 
+  // мутации
   setEvents: (arr: Event[]) => void;
   upsert: (e: Event) => void;
   add: (e: Event) => void;
   updateStatus: (id: string, status: Event["status"]) => void;
   remove: (id: string) => void;
+  deleteById: (id: string) => Promise<void>; // удаление на бэке + оптимистично в сторе
 
-  /** ⬇️ новый экшен: удалить на бэке + сразу убрать из стора (с откатом при ошибке) */
-  deleteById: (id: string) => Promise<void>;
-
+  // сервисное
   seed: () => void;
   clear: () => void;
 };
@@ -32,10 +33,11 @@ export const useEventStore = create<EventState>((set, get) => ({
   upsert: (e) => {
     const curr = get().events;
     const idx = curr.findIndex((x) => x.id === e.id);
-    if (idx === -1) set({ events: [e, ...curr] });
-    else {
+    if (idx === -1) {
+      set({ events: [e, ...curr] });
+    } else {
       const copy = curr.slice();
-      copy[idx] = { ...copy[idx], ...e };
+      copy[idx] = { ...copy[idx], ...e }; // merge, чтобы не потерять локальные поля
       set({ events: copy });
     }
   },
@@ -43,15 +45,16 @@ export const useEventStore = create<EventState>((set, get) => ({
   add: (e) => get().upsert(e),
 
   updateStatus: (id, status) => {
-    set((s) => ({ events: s.events.map((ev) => (ev.id === id ? { ...ev, status } : ev)) }));
+    set((s) => ({
+      events: s.events.map((ev) => (ev.id === id ? { ...ev, status } : ev)),
+    }));
   },
 
-  remove: (id) => set((s) => ({ events: s.events.filter((x) => x.id === id ? false : true) })),
+  remove: (id) => set((s) => ({ events: s.events.filter((x) => x.id !== id) })),
 
-  /** ⬇️ использовать в UI */
   deleteById: async (id) => {
     const prev = get().events;
-    // оптимистично убираем из списка
+    // оптимистично убираем
     set({ events: prev.filter((x) => x.id !== id) });
     try {
       await apiDeleteEvent(id); // 200/204 — ок
@@ -63,6 +66,7 @@ export const useEventStore = create<EventState>((set, get) => ({
   },
 
   clear: () => set({ events: [] }),
+
   seed: () => set({ events: DEMO }),
 
   fetchViewport: async (b) => {

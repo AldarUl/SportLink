@@ -1,4 +1,3 @@
-// src/pages/map/MapPage.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useEventStore } from "@/entities/event/store";
@@ -75,7 +74,9 @@ type DragPreview = { kind: "EVENT" | "TRAINING"; coords: LngLat } | null;
 
 export default function MapPage() {
   const navigate = useNavigate();
-  const { events } = useEventStore();
+
+  // ⬇️ ВАЖНО: точечная подписка на массив событий (чтобы гарантированно перерисовываться)
+  const events = useEventStore((s) => s.events);
 
   // ymaps API
   const { Y, apiReady } = useYmaps();
@@ -103,7 +104,7 @@ export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
 
-  // контекстное меню (оставим — вдруг пригодится)
+  // контекстное меню
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null);
 
   // drag-to-create
@@ -120,18 +121,21 @@ export default function MapPage() {
     await withdrawByEvent(id);
   };
 
-  // только ивенты с координатами И не CANCELLED
+  // если выбранный элемент исчез из стора (удален) — закрыть попап
+  useEffect(() => {
+    if (selected && !events.some((x) => x.id === selected.e.id)) {
+      setSelected(null);
+    }
+  }, [events, selected]);
+
+  // только сущности с координатами
   const markers = useMemo(
     () =>
       (events as AppEvent[]).filter(
-        (e) =>
-          e.status !== "CANCELLED" &&
-          e.locationLat != null &&
-          e.locationLon != null
+        (e) => e.locationLat != null && e.locationLon != null
       ),
     [events]
   );
-
 
   // drag image (чтобы курсор не прилипал к кнопке)
   const setNiceDragImage = (e: React.DragEvent, label = "•") => {
@@ -152,7 +156,6 @@ export default function MapPage() {
   };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
-    // позволяем дроп
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
     if (!containerRef.current || !lastBoundsRef.current) return;
@@ -162,7 +165,6 @@ export default function MapPage() {
     const y = e.clientY - rect.top;
     const coords = screenToLngLatMercator(lastBoundsRef.current, rect.width, rect.height, x, y);
 
-    // узнаём, что тащим
     const kind = (e.dataTransfer.getData("text/sportlink-kind") as "EVENT" | "TRAINING") || dragPreview?.kind;
     if (!kind) return;
 
@@ -187,7 +189,7 @@ export default function MapPage() {
     setCreateState({ kind, coords });
   }, [isAuthed, navigate]);
 
-  // контекстное меню мышью (опционально оставим ПКМ на контейнере — но без фолбэка в центр)
+  // контекстное меню мышью
   const handleContainerContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     if (!containerRef.current || !lastBoundsRef.current) return;
@@ -248,7 +250,7 @@ export default function MapPage() {
         </button>
       </div>
 
-      {/* Контекстное меню (ПКМ) — опционально */}
+      {/* Контекстное меню (ПКМ) */}
       {ctxMenu && (
         <div
           className="absolute z-50 bg-white rounded-lg shadow-lg p-2 min-w-[180px]"
