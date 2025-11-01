@@ -72,9 +72,26 @@ public class EventServiceImpl implements EventService {
                 .build();
 
         e = eventRepository.save(e);
+
+        // ✅ Автозапись организатора на своё событие (CONFIRMED)
+        try {
+            if (!applicationRepository.existsByEventIdAndUserId(e.getId(), organizerId)) {
+                applicationRepository.save(
+                        com.sportlink.application.model.Application.builder()
+                                .eventId(e.getId())
+                                .userId(organizerId)
+                                .status(ApplicationStatus.CONFIRMED)
+                                .build()
+                );
+            }
+        } catch (org.springframework.dao.DataIntegrityViolationException ignore) {
+            // На случай гонки/повторной попытки — просто игнорируем
+        }
+
         notificationService.eventCreated(e.getId(), e.getTitle(), e.getOrganizerId());
         return toDto(e);
     }
+
 
     @Override
     @Transactional(readOnly = true)

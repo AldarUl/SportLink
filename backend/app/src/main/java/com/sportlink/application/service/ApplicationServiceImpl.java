@@ -31,62 +31,75 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     @Override
     public ApplicationResponse apply(UUID eventId, UUID userId) {
-        // Идемпотентность: если уже есть заявка — вернуть её
-        var existing = appRepo.findByEventIdAndUserId(eventId, userId);
-        if (existing.isPresent()) {
-            return toDto(existing.get());
-        }
-
-        // Блокируем событие на время расчёта слотов
+        // Лочим событие
         Event e = eventRepo.lockById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found"));
 
-        var now = OffsetDateTime.now();
+        var now = OffsetDateTime.now(); // можно оставить так; хочешь — сделай now(ZoneOffset.UTC)
+
+        // базовые валидаторы
         if (e.getStartsAt().isBefore(now)) {
             throw new IllegalStateException("Event already started");
         }
         if (e.getRegistrationDeadline() != null && !now.isBefore(e.getRegistrationDeadline())) {
             throw new IllegalStateException("Registration is closed");
         }
-
-        // клубный доступ
         if (e.getAccess() == EventAccess.CLUB_ONLY) {
             if (e.getClubId() == null || !clubMemberRepository.existsByClubIdAndUserId(e.getClubId(), userId)) {
                 throw new org.springframework.security.access.AccessDeniedException("Only club members can apply");
             }
         }
-
-        // конфликт по времени с уже подтверждёнными у пользователя
         if (hasTimeConflict(userId, e)) {
             throw new IllegalStateException("Time conflict with another confirmed event");
         }
 
-        // выбор статуса с учётом capacity
-        ApplicationStatus target;
-        Integer cap = e.getCapacity(); // null -> безлимит
-        if (e.getAdmission() == EventAdmission.AUTO) {
-            if (cap == null) {
-                target = ApplicationStatus.CONFIRMED;
-            } else {
-                long confirmed = appRepo.countByEventIdAndStatus(eventId, ApplicationStatus.CONFIRMED);
-                if (confirmed < cap) {
-                    target = ApplicationStatus.CONFIRMED;
-                } else if (e.isWaitlistEnabled()) {
-                    target = ApplicationStatus.WAITLISTED;
-                } else {
-                    throw new IllegalStateException("No free slots");
-                }
+        // идемпотентность + разрешаем re-apply после DECLINED
+        var existingOpt = appRepo.findByEventIdAndUserId(eventId, userId);
+        if (existingOpt.isPresent()) {
+            Application a = existingOpt.get();
+
+            if (a.getStatus() == ApplicationStatus.DECLINED) {
+                // разрешаем повторную подачу: пересчитываем целевой статус
+                ApplicationStatus target = computeTargetStatus(e);
+                a.setStatus(target);
+                a = appRepo.save(a);
+                notificationService.applicationSubmitted(eventId, userId);
+                return toDto(a);
             }
-        } else {
-            target = ApplicationStatus.PENDING;
+
+            // уже есть активная/ожидающая/лист ожидания — просто вернуть
+            return toDto(a);
         }
 
+        // новой заявки ещё нет — создаём
+        ApplicationStatus target = computeTargetStatus(e);
         Application a = appRepo.save(Application.builder()
-                .eventId(eventId).userId(userId).status(target).build());
+                .eventId(eventId)
+                .userId(userId)
+                .status(target)
+                .build());
 
         notificationService.applicationSubmitted(eventId, userId);
         return toDto(a);
     }
+
+    /** Вычисляем статус при подаче с учётом admission/capacity/waitlist */
+    private ApplicationStatus computeTargetStatus(Event e) {
+        Integer cap = e.getCapacity();
+        if (e.getAdmission() == EventAdmission.AUTO) {
+            if (cap == null) return ApplicationStatus.CONFIRMED;
+
+            long confirmed = appRepo.countByEventIdAndStatus(e.getId(), ApplicationStatus.CONFIRMED);
+            if (confirmed < cap) return ApplicationStatus.CONFIRMED;
+
+            if (e.isWaitlistEnabled()) return ApplicationStatus.WAITLISTED;
+            throw new IllegalStateException("No free slots");
+        } else {
+            // MANUAL — всегда PENDING, вместимость проверяется на confirm()
+            return ApplicationStatus.PENDING;
+        }
+    }
+
 
     @Override
     public ApplicationResponse confirm(UUID applicationId, UUID organizerId) {
@@ -170,6 +183,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
+    @Transactional
     public void withdraw(UUID applicationId, UUID userId) {
         Application a = appRepo.findById(applicationId)
                 .orElseThrow(() -> new EntityNotFoundException("Application not found"));
@@ -177,13 +191,14 @@ public class ApplicationServiceImpl implements ApplicationService {
             throw new IllegalArgumentException("Only applicant can withdraw");
         }
 
-        // Блокируем событие перед освобождением слота
+        // Лочим событие, чтобы корректно освободить слот
         Event e = eventRepo.lockById(a.getEventId())
                 .orElseThrow(() -> new EntityNotFoundException("Event not found"));
 
         boolean wasConfirmed = a.getStatus() == ApplicationStatus.CONFIRMED;
-        a.setStatus(ApplicationStatus.DECLINED); // без отдельного статуса WITHDRAWN
-        appRepo.save(a);
+
+        // ⬇️ вместо a.setStatus(DECLINED) — просто удаляем
+        appRepo.delete(a);
 
         if (wasConfirmed && e.isWaitlistEnabled()) {
             promoteFromWaitlistIfPossible(e);
