@@ -44,4 +44,9 @@ sportlink:
     retention-days: 7               # держим прошедшие 7 дней (0 — удалять сразу)
     cleanup-batch-size: 500
     end-grace-minutes: 10           # небольшой запас к фактическому окончанию
+    # через сколько дней после окончания чистить FINISHED
+    retentionDays: 30
+    # можно выключить обработчик (например, для профиля разработки)
+    lifecycleEnabled: true
+
 

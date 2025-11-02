@@ -18,6 +18,13 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
 
     List<Event> findByKindOrderByStartsAtAsc(EventKind kind);
 
+    // ТИКЕР: подобрать порциями, чтобы не упереться в большие выборки
+    List<Event> findTop1000ByStatusAndStartsAtLessThanEqual(EventStatus status, OffsetDateTime now);
+
+    List<Event> findTop1000ByStatus(EventStatus status);
+
+    List<Event> findTop1000ByStatusAndStartsAtBefore(EventStatus status, OffsetDateTime before);
+
     Page<Event> findAll(Pageable pageable);
     Page<Event> findByStatus(EventStatus status, Pageable pageable);
 
@@ -31,4 +38,6 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     List<Event> findByOrganizerIdAndStatusNotAndStartsAtAfter(UUID organizerId, EventStatus status, OffsetDateTime after);
 
     Page<Event> findByStartsAtBefore(OffsetDateTime cutoff, Pageable pageable);
+
+
 }

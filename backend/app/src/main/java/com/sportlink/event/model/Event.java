@@ -41,7 +41,7 @@ public class Event {
     @Column(name = "duration_min", nullable = false)
     private Integer durationMin;
 
-    @Column(nullable = false)
+    @Column
     private Integer capacity;
 
     @Column(name = "waitlist_enabled", nullable = false)

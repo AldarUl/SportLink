@@ -270,12 +270,12 @@ public class EventServiceImpl implements EventService {
     @Transactional(readOnly = true)
     public boolean hasFreeCapacity(UUID eventId) {
         var e = eventRepository.findById(eventId).orElseThrow();
-        // если когда-нибудь будет null — считаем безлимитом
-        Integer cap = e.getCapacity();
-        if (cap == null) return true;
+        // без лимита
+        if (e.getCapacity() == null || e.getCapacity() <= 0) return true;
         long confirmed = applicationRepository.countByEventIdAndStatus(eventId, ApplicationStatus.CONFIRMED);
-        return confirmed < cap;
+        return confirmed < e.getCapacity();
     }
+
 
     /* helpers */
     private void requireOrganizer(Event e, UUID userId) {

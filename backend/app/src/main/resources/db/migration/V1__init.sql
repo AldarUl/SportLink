@@ -4,6 +4,16 @@
 -- Расширения
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- =========
+-- helper: IMMUTABLE lower() для индексов/уникальных ограничений
+-- =========
+CREATE OR REPLACE FUNCTION immutable_lower(t text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$ SELECT lower(t) $$;
+
 -- =========================
 -- Пользователи
 -- =========================
@@ -12,23 +22,14 @@ CREATE TABLE IF NOT EXISTS app_user (
     email         VARCHAR(255) NOT NULL,
     display_name  VARCHAR(120),
     password_hash VARCHAR(255) NOT NULL,
-    role          VARCHAR(16)  NOT NULL DEFAULT 'USER',  -- USER | ADMIN (при необходимости)
+    role          VARCHAR(16)  NOT NULL DEFAULT 'USER',  -- USER | ADMIN
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ
 );
 
--- Уникальность email без учета регистра
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM   pg_indexes
-    WHERE  schemaname = 'public'
-    AND    indexname  = 'ux_app_user_email_ci'
-  ) THEN
-    EXECUTE 'CREATE UNIQUE INDEX ux_app_user_email_ci ON app_user ((lower(email)))';
-  END IF;
-END $$;
+-- Уникальность email без учета регистра (через IMMUTABLE-обёртку)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_app_user_email_ci
+    ON app_user (immutable_lower(email));
 
 -- =========================
 -- Клубы и членство
@@ -79,17 +80,17 @@ CREATE TABLE IF NOT EXISTS event (
     CONSTRAINT chk_event_access      CHECK (access   IN ('PUBLIC','CLUB_ONLY')),
     CONSTRAINT chk_event_admission   CHECK (admission IN ('AUTO','MANUAL')),
     CONSTRAINT chk_event_status      CHECK (status   IN ('PUBLISHED','CANCELLED')),
+    -- capacity: либо NULL (безлимит), либо >= 1
+    CONSTRAINT chk_event_capacity_pos CHECK (capacity IS NULL OR capacity >= 1),
     -- координаты допускают NULL; если заданы, то в допустимых диапазонах
     CONSTRAINT chk_event_lat_range   CHECK (location_lat IS NULL OR (location_lat BETWEEN -90  AND 90)),
     CONSTRAINT chk_event_lon_range   CHECK (location_lon IS NULL OR (location_lon BETWEEN -180 AND 180))
 );
 
--- FK на клуб (отложенно, чтобы гарантировать существование таблицы club)
+-- FK на клуб (SET NULL)
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'fk_event_club'
-  ) THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_event_club') THEN
     ALTER TABLE event
       ADD CONSTRAINT fk_event_club
       FOREIGN KEY (club_id) REFERENCES club(id)
@@ -100,18 +101,17 @@ END $$;
 -- Индексы для ленты/поиска
 CREATE INDEX IF NOT EXISTS ix_event_starts            ON event(starts_at);
 CREATE INDEX IF NOT EXISTS ix_event_kind_starts       ON event(kind, starts_at);
-CREATE INDEX IF NOT EXISTS ix_event_sport_starts      ON event(lower(sport), starts_at);
+-- Было: lower(sport). Столкнулись с IMMUTABLE — используем обёртку.
+CREATE INDEX IF NOT EXISTS ix_event_sport_starts      ON event(immutable_lower(sport), starts_at);
 CREATE INDEX IF NOT EXISTS ix_event_access_starts     ON event(access, starts_at);
 CREATE INDEX IF NOT EXISTS ix_event_admission_starts  ON event(admission, starts_at);
 CREATE INDEX IF NOT EXISTS ix_event_club_starts       ON event(club_id, starts_at);
--- полезно для админ-панели
 CREATE INDEX IF NOT EXISTS ix_event_status_starts     ON event(status, starts_at);
 
 -- GEO-индексы под BBOX (BETWEEN по lat/lon)
 CREATE INDEX IF NOT EXISTS ix_event_location_lat      ON event(location_lat);
 CREATE INDEX IF NOT EXISTS ix_event_location_lon      ON event(location_lon);
 CREATE INDEX IF NOT EXISTS ix_event_location_lat_lon  ON event(location_lat, location_lon);
--- Частичный индекс для непустых координат (ускоряет выборки только по «гео»)
 CREATE INDEX IF NOT EXISTS ix_event_location_present
     ON event(location_lat, location_lon)
     WHERE location_lat IS NOT NULL AND location_lon IS NOT NULL;
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS refresh_token (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id     UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
 
-    token_hash  VARCHAR(64) NOT NULL,               -- sha256 в hex (64 символа)
+    token_hash  VARCHAR(64) NOT NULL,               -- sha256 hex (64)
     family_id   UUID        NOT NULL DEFAULT uuid_generate_v4(),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at  TIMESTAMPTZ NOT NULL,
@@ -170,9 +170,7 @@ CREATE INDEX IF NOT EXISTS ix_refresh_token_family_id        ON refresh_token(fa
 
 DO $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'fk_refresh_token_replaced_by'
-  ) THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_refresh_token_replaced_by') THEN
     ALTER TABLE refresh_token
       ADD CONSTRAINT fk_refresh_token_replaced_by
       FOREIGN KEY (replaced_by) REFERENCES refresh_token(id)
