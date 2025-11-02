@@ -211,6 +211,7 @@ function MyTrainingsPanel({
 
 /* ===================== RIGHT: Я организатор ===================== */
 
+// ---- Organizer panel: capacity, waitlist, time rules, tabs, bulk actions ----
 type AppRow = {
   id: string;
   userId: string;
@@ -219,44 +220,44 @@ type AppRow = {
 };
 
 function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
-  const [appsByEvent, setAppsByEvent] = useState<Record<string, AppRow[]>>({});
-  const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({});
-  const [loadingEvent, setLoadingEvent] = useState<Record<string, boolean>>({});
-  const [rowPending, setRowPending] = useState<Record<string, boolean>>({});
-  const [errors, setErrors] = useState<Record<string, string | null>>({});
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [appsByEvent, setAppsByEvent] = React.useState<Record<string, AppRow[]>>({});
+  const [panelOpen, setPanelOpen] = React.useState<Record<string, boolean>>({});
+  const [loadingEvent, setLoadingEvent] = React.useState<Record<string, boolean>>({});
+  const [rowPending, setRowPending] = React.useState<Record<string, boolean>>({});
+  const [errors, setErrors] = React.useState<Record<string, string | null>>({});
 
-  // Компаратор
+  // уже были: счётчики всех заявок (totalElements) для кнопки-тизера
+  const [counts, setCounts] = React.useState<Record<string, number>>({});
+
+  // фильтр (табы) по каждому событию
+  const [filters, setFilters] = React.useState<Record<string, "ALL" | "PENDING" | "CONFIRMED">>({});
+
+  // массовые операции — индикатор
+  const [bulkBusy, setBulkBusy] = React.useState<Record<string, boolean>>({});
+
   const sortApps = (items: AppRow[]) =>
     [...items].sort((a, b) => Number(b.status === "PENDING") - Number(a.status === "PENDING"));
 
-  // 👇 новое: лёгкая подгрузка только количества (totalElements)
-  const loadCount = useCallback(async (eventId: string) => {
+  const loadCount = React.useCallback(async (eventId: string) => {
     try {
-      // берём минимальный размер страницы — в нашей обёртке всё равно вернётся totalElements
       const page = await applicationsByEvent(eventId, 0, 1);
       setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
-    } catch {
-      // в случае ошибки не перетираем; можно поставить 0 или оставить undefined
-    }
+    } catch {/* no-op */}
   }, []);
 
-  // 👇 новое: когда список моих событий меняется — подтянуть счётчики там, где их ещё нет
-  useEffect(() => {
+  // подтягиваем счётчики для «моих» событий
+  React.useEffect(() => {
     const ids = (myEvents || []).map((e: any) => String(e.id)).filter(Boolean);
-    const missing = ids.filter((id) => counts[id] === undefined);
-    if (!missing.length) return;
-    // мягко параллелим; если событий много — можно батчить
-    missing.forEach((id) => { loadCount(id); });
+    ids.forEach((id) => { if (counts[id] === undefined) loadCount(id); });
   }, [myEvents, counts, loadCount]);
 
-  const reload = useCallback(async (eventId: string) => {
+  const reload = React.useCallback(async (eventId: string) => {
     setErrors((m) => ({ ...m, [eventId]: null }));
     setLoadingEvent((p) => ({ ...p, [eventId]: true }));
     try {
       const page = await applicationsByEvent(eventId, 0, 50);
       setAppsByEvent((m) => ({ ...m, [eventId]: sortApps(page.content as AppRow[]) }));
-      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) })); // 👈 обновили счётчик
+      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
       setPanelOpen((o) => ({ ...o, [eventId]: true }));
     } catch (e: any) {
       setErrors((m) => ({ ...m, [eventId]: e?.response?.data?.message || e?.message || "Не удалось загрузить заявки" }));
@@ -266,20 +267,30 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
     }
   }, []);
 
-  const act = useCallback(async (appId: string, action: "confirm" | "decline", eventId: string) => {
+  const act = React.useCallback(async (appId: string, action: "confirm" | "decline", eventId: string) => {
     setRowPending((rp) => ({ ...rp, [appId]: true }));
     try {
       if (action === "confirm") await apiConfirm(appId);
       else await apiDecline(appId);
       const page = await applicationsByEvent(eventId, 0, 50);
       setAppsByEvent((m) => ({ ...m, [eventId]: sortApps(page.content as AppRow[]) }));
-      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) })); // 👈 держим в синхроне
+      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
     } catch (e: any) {
       setErrors((m) => ({ ...m, [eventId]: e?.response?.data?.message || e?.message || "Операция не удалась" }));
     } finally {
       setRowPending((rp) => ({ ...rp, [appId]: false }));
     }
   }, []);
+
+  // ui атом
+  const TabBtn = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-2 py-1 text-xs ${active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+    >
+      {children}
+    </button>
+  );
 
   return (
     <aside
@@ -289,14 +300,11 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
         inline-flex flex-col
         overflow-hidden rounded-2xl
         bg-white/95 shadow-xl backdrop-blur
-        max-h-[calc(100vh-24px)]   /* ← ограничиваем по высоте экрана */
+        max-h-[calc(100vh-24px)]
       "
     >
-      <div className="border-b px-4 py-3 text-sm font-semibold shrink-0">
-        Я организатор
-      </div>
+      <div className="border-b px-4 py-3 text-sm font-semibold shrink-0">Я организатор</div>
 
-      {/* было: h-full overflow-y-auto ...  */}
       <div className="overflow-y-auto px-3 pb-4 pt-2">
         {!myEvents?.length && (
           <div className="m-3 rounded-lg border px-3 py-2 text-sm text-gray-600">
@@ -305,12 +313,62 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
         )}
 
         {myEvents?.map((e: any) => {
-          const evId = e.id as string;
+          const evId = String(e.id);
           const opened  = panelOpen[evId];
           const loading = loadingEvent[evId];
           const err     = errors[evId];
           const apps    = appsByEvent[evId] || [];
-          const count = counts[evId] ?? (apps?.length ?? 0); // если ещё не загрузили count — подстрахуемся локальным списком
+          const tab     = filters[evId] || "ALL";
+
+          // время/правила
+          const now = Date.now();
+          const startsAtTs = e.startsAt ? new Date(e.startsAt).getTime() : NaN;
+          const regTs      = e.registrationDeadline ? new Date(e.registrationDeadline).getTime() : NaN;
+          const started    = Number.isFinite(startsAtTs) && now >= startsAtTs;
+          const closed     = Number.isFinite(regTs) && now >= regTs && !started;
+
+          // capacity/waitlist
+          const capacity: number | null =
+            typeof e.capacity === "number" && e.capacity > 0 ? e.capacity : null; // null = безлимит
+          const waitlistEnabled = !!e.waitlistEnabled;
+
+          const confirmedCount = apps.filter(a => a.status === "CONFIRMED").length;
+          const pendingCount   = apps.filter(a => a.status === "PENDING").length;
+          const full           = capacity !== null && confirmedCount >= capacity;
+          const available      = capacity === null ? Infinity : Math.max(0, capacity - confirmedCount);
+
+          // фильтрация по табам
+          const visibleApps = apps.filter(a =>
+            tab === "ALL" ? true : (tab === "PENDING" ? a.status === "PENDING" : a.status === "CONFIRMED")
+          );
+
+          // массовые действия
+          const busy = !!bulkBusy[evId];
+          const canBulkConfirm = !started && pendingCount > 0 && available > 0;
+          const canBulkDecline = !started && pendingCount > 0;
+
+          const doBulkConfirm = async () => {
+            setBulkBusy((b) => ({ ...b, [evId]: true }));
+            try {
+              const toConfirm = apps.filter(a => a.status === "PENDING").slice(0, available === Infinity ? apps.length : available);
+              await Promise.allSettled(toConfirm.map(a => apiConfirm(a.id)));
+              await reload(evId);
+            } finally {
+              setBulkBusy((b) => ({ ...b, [evId]: false }));
+            }
+          };
+          const doBulkDecline = async () => {
+            setBulkBusy((b) => ({ ...b, [evId]: true }));
+            try {
+              const toDecline = apps.filter(a => a.status === "PENDING");
+              await Promise.allSettled(toDecline.map(a => apiDecline(a.id)));
+              await reload(evId);
+            } finally {
+              setBulkBusy((b) => ({ ...b, [evId]: false }));
+            }
+          };
+
+          const countTeaser = counts[evId] ?? (apps?.length ?? 0);
 
           return (
             <div key={evId} className="mb-3 rounded-xl border p-3 shadow-sm">
@@ -319,89 +377,175 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
                   <div className="text-sm font-semibold leading-snug">{e.title || "Без названия"}</div>
                   <div className="text-xs text-gray-500">
                     {(e.kind || "TRAINING").toString().toUpperCase() === "EVENT" ? "Событие" : "Тренировка"}
-                    {e.sport ? ` · ${e.sport}` : ""}
-                    {e.status ? ` · ${e.status}` : ""}
+                    {e.sport ? ` · ${e.sport}` : ""}{e.status ? ` · ${e.status}` : ""}
+                  </div>
+
+                  {/* сводка по набору */}
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-600">
+                    <span>
+                      Подтверждено: <b>{confirmedCount}</b>{capacity !== null ? `/${capacity}` : ""}
+                    </span>
+                    <span className="mx-1">·</span>
+                    <span>В ожидании: <b>{pendingCount}</b></span>
+                    {full && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Мест нет</span>}
+                    {closed && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">Набор закрыт</span>}
+                    {started && <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">Событие началось</span>}
+                    {waitlistEnabled && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">Лист ожидания</span>}
                   </div>
                 </div>
+
                 <Link to={`/event/${evId}`} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
                   Подробнее
                 </Link>
               </div>
 
-                <button
-                  className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
-                  onClick={() => (opened ? setPanelOpen({ ...panelOpen, [evId]: false }) : reload(evId))}
-                >
-                  {loading ? "Загрузка..." : opened ? "Скрыть заявки" : `Показать заявки (${count ?? "…"})`}
-                </button>
+              {/* раскрыть/скрыть */}
+              <button
+                className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                onClick={() => (opened ? setPanelOpen({ ...panelOpen, [evId]: false }) : reload(evId))}
+              >
+                {loading ? "Загрузка..." : opened ? "Скрыть заявки" : `Показать заявки (${countTeaser})`}
+              </button>
 
               {opened && (
                 <div className="space-y-2">
                   {err && (
-                    <div className="rounded-md border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700">
-                      {err}
-                    </div>
+                    <div className="rounded-md border border-red-200 bg-red-50 px-2 py-2 text-xs text-red-700">{err}</div>
                   )}
 
-                  {!err && !apps.length && (
-                    <div className="rounded-md border px-2 py-2 text-xs text-gray-600">Пока нет заявок.</div>
-                  )}
+                  {!err && (
+                    <>
+                      {/* табы + массовые действия */}
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-1">
+                          <TabBtn active={tab === "ALL"} onClick={() => setFilters((f) => ({ ...f, [evId]: "ALL" }))}>
+                            Все {apps.length}
+                          </TabBtn>
+                          <TabBtn active={tab === "PENDING"} onClick={() => setFilters((f) => ({ ...f, [evId]: "PENDING" }))}>
+                            В ожидании {pendingCount}
+                          </TabBtn>
+                          <TabBtn active={tab === "CONFIRMED"} onClick={() => setFilters((f) => ({ ...f, [evId]: "CONFIRMED" }))}>
+                            Подтверждённые {confirmedCount}
+                          </TabBtn>
+                        </div>
 
-                {!err && apps.map((a) => {
-                  const isPending   = a.status === "PENDING";
-                  const isConfirmed = a.status === "CONFIRMED"; // 👈 новое
-                  const disabled    = !!rowPending[a.id];
-
-                  return (
-                    <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-2">
-                      <div className="leading-tight">
-                        <UserInline userId={a.userId} />
-                        <div className="text-[11px] text-gray-500">Статус: {a.status}</div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Link
-                          to={`/chat?peerId=${a.userId}&eventId=${evId}`}
-                          className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
-                        >
-                          Чат
-                        </Link>
-
-                        {isPending && (
-                          <>
-                            <button
-                              disabled={disabled}
-                              className={`rounded-md px-2 py-1 text-xs ${disabled ? "opacity-50 cursor-not-allowed bg-emerald-50 text-emerald-700" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"}`}
-                              onClick={() => act(a.id, "confirm", evId)}
-                            >
-                              Подтвердить
-                            </button>
-                            <button
-                              disabled={disabled}
-                              className={`rounded-md px-2 py-1 text-xs ${disabled ? "opacity-50 cursor-not-allowed bg-red-50 text-red-600" : "bg-red-50 text-red-600 hover:bg-red-100"}`}
-                              onClick={() => act(a.id, "decline", evId)}
-                            >
-                              Отклонить
-                            </button>
-                          </>
-                        )}
-
-                        {/* 👇 новое: «удалить из тренировки» для подтверждённых */}
-                        {isConfirmed && (
+                        <div className="flex items-center gap-2">
                           <button
-                            disabled={disabled}
-                            title="Исключить участника (перевести в DECLINED)"
-                            className={`rounded-md px-2 py-1 text-xs ${disabled ? "opacity-50 cursor-not-allowed bg-gray-50 text-gray-700" : "bg-gray-50 text-gray-700 hover:bg-gray-100"}`}
-                            onClick={() => act(a.id, "decline", evId)}
+                            disabled={busy || !canBulkConfirm}
+                            title={
+                              started ? "Событие уже началось"
+                                : available === 0 ? "Свободных мест нет"
+                                : pendingCount === 0 ? "Нет ожидающих"
+                                : "Подтвердить ожидающих в рамках свободных мест"
+                            }
+                            onClick={doBulkConfirm}
+                            className={`rounded-md px-2 py-1 text-xs ${
+                              busy || !canBulkConfirm
+                                ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
+                                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            }`}
                           >
-                            Исключить
+                            Подтвердить всех
                           </button>
-                        )}
+                          <button
+                            disabled={busy || !canBulkDecline}
+                            title={started ? "Событие уже началось" : pendingCount === 0 ? "Нет ожидающих" : "Отклонить всех ожидающих"}
+                            onClick={doBulkDecline}
+                            className={`rounded-md px-2 py-1 text-xs ${
+                              busy || !canBulkDecline
+                                ? "cursor-not-allowed bg-red-50 text-red-600/50"
+                                : "bg-red-50 text-red-600 hover:bg-red-100"
+                            }`}
+                          >
+                            Отклонить всех
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
 
+                      {/* список */}
+                      {!visibleApps.length && (
+                        <div className="rounded-md border px-2 py-2 text-xs text-gray-600">Список пуст.</div>
+                      )}
+
+                      {visibleApps.map((a) => {
+                        const isPending   = a.status === "PENDING";
+                        const isConfirmed = a.status === "CONFIRMED";
+                        const disabledRow = !!rowPending[a.id];
+
+                        // блокируем действия после старта; confirm — ещё и при полном зале
+                        const canConfirm = isPending && !disabledRow && !started && (capacity === null || confirmedCount < capacity);
+                        const canDecline = (isPending || isConfirmed) && !disabledRow && !started;
+
+                        return (
+                          <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-2">
+                            <div className="leading-tight">
+                              <UserInline userId={a.userId} />
+                              <div className="text-[11px] text-gray-500">Статус: {a.status}</div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* Стабильная заглушка чата */}
+                              <Link
+                                to={`/chat?peerId=${a.userId}&eventId=${evId}`}
+                                className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
+                              >
+                                Чат
+                              </Link>
+
+                              {isPending && (
+                                <>
+                                  <button
+                                    disabled={!canConfirm}
+                                    title={
+                                      started ? "Событие уже началось"
+                                        : full ? "Свободных мест нет"
+                                        : "Подтвердить участие"
+                                    }
+                                    className={`rounded-md px-2 py-1 text-xs ${
+                                      !canConfirm
+                                        ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
+                                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                    }`}
+                                    onClick={() => act(a.id, "confirm", evId)}
+                                  >
+                                    Подтвердить
+                                  </button>
+                                  <button
+                                    disabled={!canDecline}
+                                    title={started ? "Событие уже началось" : "Отклонить заявку"}
+                                    className={`rounded-md px-2 py-1 text-xs ${
+                                      !canDecline
+                                        ? "cursor-not-allowed bg-red-50 text-red-600/50"
+                                        : "bg-red-50 text-red-600 hover:bg-red-100"
+                                    }`}
+                                    onClick={() => act(a.id, "decline", evId)}
+                                  >
+                                    Отклонить
+                                  </button>
+                                </>
+                              )}
+
+                              {/* «Исключить» подтверждённого участника */}
+                              {isConfirmed && (
+                                <button
+                                  disabled={!canDecline}
+                                  title={started ? "Событие уже началось" : "Исключить участника (DECLINED)"}
+                                  className={`rounded-md px-2 py-1 text-xs ${
+                                    !canDecline
+                                      ? "cursor-not-allowed bg-gray-50 text-gray-500"
+                                      : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                                  }`}
+                                  onClick={() => act(a.id, "decline", evId)}
+                                >
+                                  Исключить
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -411,6 +555,7 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
     </aside>
   );
 }
+
 
 /* ===================== BOTTOM: Dock (круглые drag-кнопки) ===================== */
 
