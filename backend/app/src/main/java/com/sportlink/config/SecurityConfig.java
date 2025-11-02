@@ -57,6 +57,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
 
+                    // 👉 Открыть отдачу аватаров/статических файлов
+                    auth.requestMatchers(HttpMethod.GET, "/files/**").permitAll();
+                    auth.requestMatchers(HttpMethod.HEAD, "/files/**").permitAll(); // опционально
+
+
                     // Swagger / OpenAPI
                     auth.requestMatchers(
                             "/api-docs/**",

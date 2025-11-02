@@ -225,4 +225,4 @@ BEGIN
   END IF;
 END $$ LANGUAGE plpgsql;
 
-ALTER TABLE "user" ADD COLUMN avatar_url varchar(512);
+ALTER TABLE app_user ADD COLUMN IF NOT EXISTS avatar_url varchar(512);

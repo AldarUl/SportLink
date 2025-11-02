@@ -16,6 +16,11 @@ spring:
     encoding: UTF-8
     use-code-as-default-message: true   # если ключ не найден, вернуть сам ключ
     fallback-to-system-locale: false
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 6MB
+
 
 
 server:
@@ -55,4 +60,8 @@ sportlink:
     # можно выключить обработчик (например, для профиля разработки)
     lifecycleEnabled: true
 
+# где хранить файлы (AvatarServiceImpl читает app.files.root)
+app:
+  files:
+    root: ./var
 

@@ -7,6 +7,7 @@ import com.sportlink.user.dto.UserUpdateRequest;
 import com.sportlink.user.model.User;
 import com.sportlink.user.repository.UserRepository;
 import com.sportlink.user.repository.UserSportSkillRepository;
+import com.sportlink.user.service.AvatarService;
 import com.sportlink.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -60,21 +61,21 @@ public class UserController {
                 .toList();
     }
 
-    @io.swagger.v3.oas.annotations.Operation(summary = "Загрузить аватар")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping(value = "/me/avatar", consumes = "multipart/form-data")
     public UserResponse uploadAvatar(@RequestPart("file") MultipartFile file, Authentication auth) throws Exception {
         UUID meId = userRepository.findByEmail(auth.getName()).orElseThrow().getId();
         var u = userRepository.findById(meId).orElseThrow();
-        // по желанию — удалить старые версии
+
         avatarService.deleteAll(meId);
-        String url = avatarService.store(meId, file);
-        u.setAvatarUrl(url);
-        u = userRepository.save(u);
-        return toDto(u);
+        avatarService.store(meId, file);
+
+        u.setAvatarUrl(avatarService.link(meId)); // 👉 ссылка с версией
+        userRepository.save(u);
+
+        return userService.get(meId);
     }
 
-    @io.swagger.v3.oas.annotations.Operation(summary = "Удалить аватар")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @DeleteMapping("/me/avatar")
     public void deleteAvatar(Authentication auth) throws Exception {

@@ -21,6 +21,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final NotificationService notificationService;
+    private final AvatarService avatarService; // ⬅️ добавили
 
     @Override
     public UserResponse create(UserCreateRequest req) {
@@ -68,6 +69,8 @@ public class UserServiceImpl implements UserService {
     }
 
     private UserResponse toDto(User u) {
-        return new UserResponse(u.getId(), u.getEmail(), u.getDisplayName());
+        String avatar = null;
+        try { avatar = avatarService.link(u.getId()); } catch (Exception ignored) {}
+        return new UserResponse(u.getId(), u.getEmail(), u.getDisplayName(), avatar);
     }
 }
