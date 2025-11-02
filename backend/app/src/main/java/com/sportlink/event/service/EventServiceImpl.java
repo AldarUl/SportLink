@@ -26,10 +26,59 @@ import static com.sportlink.event.service.EventSpecifications.*;
 @RequiredArgsConstructor
 @Transactional
 public class EventServiceImpl implements EventService {
+    private static final int MAX_ACTIVE_ORG_EVENTS = 3; // лимит событий
+
     private final EventRepository eventRepository;
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
     private final ApplicationRepository applicationRepository;
     private final NotificationService notificationService;
+
+    private static boolean overlaps(OffsetDateTime s1, Integer d1Min,
+                                    OffsetDateTime s2, Integer d2Min) {
+        if (s1 == null || d1Min == null || s2 == null || d2Min == null) return false;
+        var e1 = s1.plusMinutes(d1Min.longValue());
+        var e2 = s2.plusMinutes(d2Min.longValue());
+        // [start, end)
+        return s1.isBefore(e2) && s2.isBefore(e1);
+    }
+
+    private void ensureOrganizerLimit(UUID organizerId) {
+        long active = eventRepository.countByOrganizerIdAndStatusNotAndStartsAtAfter(
+                organizerId, EventStatus.CANCELLED, OffsetDateTime.now()
+        );
+        if (active >= MAX_ACTIVE_ORG_EVENTS) {
+            throw new IllegalStateException("ORGANIZER_LIMIT_EXCEEDED: maximum " + MAX_ACTIVE_ORG_EVENTS + " future events");
+        }
+    }
+
+    private void ensureNoOverlapOnCreate(UUID organizerId, OffsetDateTime start, Integer durMin) {
+        var future = eventRepository.findByOrganizerIdAndStatusNotAndStartsAtAfter(
+                organizerId, EventStatus.CANCELLED, OffsetDateTime.now()
+        );
+        for (var ex : future) {
+            if (overlaps(start, durMin, ex.getStartsAt(), ex.getDurationMin()))
+                throw new IllegalStateException("EVENT_TIME_OVERLAP: organizer already has an event overlapping in time");
+        }
+    }
+
+    private void ensureNoOverlapOnUpdate(UUID organizerId, UUID updatingId,
+                                         OffsetDateTime start, Integer durMin) {
+        var future = eventRepository.findByOrganizerIdAndStatusNotAndStartsAtAfter(
+                organizerId, EventStatus.CANCELLED, OffsetDateTime.now()
+        );
+        for (var ex : future) {
+            if (ex.getId().equals(updatingId)) continue;
+            if (overlaps(start, durMin, ex.getStartsAt(), ex.getDurationMin()))
+                throw new IllegalStateException("EVENT_TIME_OVERLAP: organizer already has an event overlapping in time");
+        }
+    }
+
+    private void validateCoords(Double lat, Double lon) {
+        if (lat != null && (lat < -90 || lat > 90)) throw new IllegalArgumentException("locationLat is out of range");
+        if (lon != null && (lon < -180 || lon > 180)) throw new IllegalArgumentException("locationLon is out of range");
+    }
+
+
 
     @Override
     public EventResponse create(EventCreateRequest r, UUID organizerId) {
@@ -50,6 +99,12 @@ public class EventServiceImpl implements EventService {
             throw new IllegalArgumentException("durationMin must be between 10 and 1440");
         if (r.registrationDeadline() != null && !r.registrationDeadline().isBefore(r.startsAt()))
             throw new IllegalArgumentException("registrationDeadline must be before startsAt");
+
+        validateCoords(r.locationLat(), r.locationLon());
+
+        // 🔒 новые бизнес-правила
+        ensureOrganizerLimit(organizerId);
+        ensureNoOverlapOnCreate(organizerId, r.startsAt(), r.durationMin());
 
         Event e = Event.builder()
                 .kind(r.kind())
@@ -73,7 +128,7 @@ public class EventServiceImpl implements EventService {
 
         e = eventRepository.save(e);
 
-        // ✅ Автозапись организатора на своё событие (CONFIRMED)
+        // автозапись организатора (CONFIRMED) — как было
         try {
             if (!applicationRepository.existsByEventIdAndUserId(e.getId(), organizerId)) {
                 applicationRepository.save(
@@ -84,13 +139,12 @@ public class EventServiceImpl implements EventService {
                                 .build()
                 );
             }
-        } catch (org.springframework.dao.DataIntegrityViolationException ignore) {
-            // На случай гонки/повторной попытки — просто игнорируем
-        }
+        } catch (org.springframework.dao.DataIntegrityViolationException ignore) {}
 
         notificationService.eventCreated(e.getId(), e.getTitle(), e.getOrganizerId());
         return toDto(e);
     }
+
 
 
     @Override
@@ -155,11 +209,16 @@ public class EventServiceImpl implements EventService {
             throw new IllegalArgumentException("registrationDeadline must be before startsAt");
 
         if (u.durationMin() != null) e.setDurationMin(u.durationMin());
+
         if (u.capacity() != null) {
             if (e.getKind() == EventKind.TRAINING && u.capacity() > 50)
                 throw new IllegalArgumentException("TRAINING capacity must be ≤ 50");
+            long confirmed = applicationRepository.countByEventIdAndStatus(e.getId(), ApplicationStatus.CONFIRMED);
+            if (u.capacity() != null && u.capacity() > 0 && confirmed > u.capacity())
+                throw new IllegalStateException("CAPACITY_TOO_SMALL: confirmed=" + confirmed + ", capacity=" + u.capacity());
             e.setCapacity(u.capacity());
         }
+
         if (u.waitlistEnabled() != null) e.setWaitlistEnabled(u.waitlistEnabled());
         if (u.access() != null) e.setAccess(u.access());
         if (u.admission() != null) {
@@ -177,6 +236,11 @@ public class EventServiceImpl implements EventService {
             boolean isMember = clubMemberRepository.existsByClubIdAndUserId(e.getClubId(), currentUserId);
             if (!isMember) throw new IllegalArgumentException("Organizer must be a club member");
         }
+
+        validateCoords(e.getLocationLat(), e.getLocationLon());
+
+        // 🔒 запрет пересечений после применения апдейта
+        ensureNoOverlapOnUpdate(e.getOrganizerId(), e.getId(), e.getStartsAt(), e.getDurationMin());
 
         e = eventRepository.save(e);
         return toDto(e);
@@ -206,8 +270,11 @@ public class EventServiceImpl implements EventService {
     @Transactional(readOnly = true)
     public boolean hasFreeCapacity(UUID eventId) {
         var e = eventRepository.findById(eventId).orElseThrow();
+        // если когда-нибудь будет null — считаем безлимитом
+        Integer cap = e.getCapacity();
+        if (cap == null) return true;
         long confirmed = applicationRepository.countByEventIdAndStatus(eventId, ApplicationStatus.CONFIRMED);
-        return confirmed < e.getCapacity();
+        return confirmed < cap;
     }
 
     /* helpers */

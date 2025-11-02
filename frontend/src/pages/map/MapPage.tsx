@@ -9,6 +9,7 @@ import { useViewport } from "./hooks/useViewport";
 import { useViewportFetch } from "./hooks/useViewportFetch";
 import { useApplyWithOverlap } from "./hooks/useApplyWithOverlap";
 import { useAuthStore } from "@/features/auth/store";
+import { useApplicationStore } from "@/entities/application/store";
 
 import type { LngLat } from "./lib/geo";
 import { GeoStatusOverlay } from "./ui/overlays/GeoStatusOverlay";
@@ -71,6 +72,77 @@ function formatTimeLeft(startIso: string | Date) {
   return `${past ? "Прошло" : "До начала"} ${parts.join(" ")}`;
 }
 
+function humanizeStart(startIso?: string | Date) {
+  if (!startIso) return null;
+  const d = new Date(startIso);
+  const now = new Date();
+  const isToday  = d.toDateString() === now.toDateString();
+  const tmr = new Date(now); tmr.setDate(now.getDate() + 1);
+  const isTomorrow = d.toDateString() === tmr.toDateString();
+
+  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const dayMonth = d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short" }); // «02 ноя»
+  if (isToday) return `Сегодня в ${time}`;
+  if (isTomorrow) return `Завтра в ${time}`;
+  return `${dayMonth} в ${time}`;
+}
+
+function downloadIcsForEvent(e: any) {
+  try {
+    const dtStart = new Date(e.startsAt);
+    const dtEnd = new Date(+dtStart + (e.durationMin || 60) * 60000);
+
+    const fmt = (d: Date) =>
+      d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); // 20250102T183000Z
+
+    const esc = (s: string) => String(s ?? "").replace(/([,;])/g, "\\$1").replace(/\n/g, "\\n");
+
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//SportLink//ru",
+      "CALSCALE:GREGORIAN",
+      "BEGIN:VEVENT",
+      `UID:${e.id}@sportlink`,
+      `DTSTAMP:${fmt(new Date())}`,
+      `DTSTART:${fmt(dtStart)}`,
+      `DTEND:${fmt(dtEnd)}`,
+      `SUMMARY:${esc(e.title || "Тренировка")}`,
+      `DESCRIPTION:${esc(e.description || "")}`,
+      e.locationLat && e.locationLon ? `GEO:${e.locationLat};${e.locationLon}` : "",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].filter(Boolean).join("\r\n");
+
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(e.title || "training").replace(/\s+/g, "_")}.ics`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch { /* no-op */ }
+}
+
+function isEventPast(e: any): boolean {
+  if (!e?.startsAt) return false;
+  const start = new Date(e.startsAt).getTime();
+  const durMs = (e.durationMin ?? 60) * 60000;
+  const end = start + durMs;
+  return Date.now() > end;
+}
+
+function StatusBadge({ s }: { s: "PENDING" | "CONFIRMED" | "DECLINED" | "WAITLISTED" | string }) {
+  const map: Record<string, string> = {
+    PENDING:    "bg-amber-50 text-amber-800",
+    CONFIRMED:  "bg-emerald-50 text-emerald-700",
+    DECLINED:   "bg-red-50 text-red-600",
+    WAITLISTED: "bg-blue-50 text-blue-700",
+  };
+  const cls = map[s] ?? "bg-gray-100 text-gray-600";
+  return <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium uppercase ${cls}`}>{s}</span>;
+}
+
 /* === User name inline (+axios cache) === */
 type UserProfile = { id: string; email?: string; displayName?: string };
 const userCache = new Map<string, UserProfile>();
@@ -112,49 +184,114 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 /* ===================== LEFT: Мои ближайшие тренировки ===================== */
-
-type MyAppItem = { id: string; status: "PENDING" | "CONFIRMED" | "DECLINED" | "WAITLISTED"; event: AppEvent };
-
 function MyTrainingsPanel({
   mine,
   myPos,
   onWithdraw,
 }: {
-  mine: MyAppItem[];
+  mine: { id: string; status: "PENDING" | "CONFIRMED" | "DECLINED" | "WAITLISTED"; event: AppEvent }[];
   myPos: LngLat | null;
   onWithdraw: (eventId: string) => void | Promise<void>;
 }) {
+  const meId = useAuthStore((s) => s.user?.id || null);
+  const [tab, setTab] = React.useState<"UPCOMING" | "PAST" | "ALL">("UPCOMING");
+  const [deleting, setDeleting] = React.useState<Record<string, boolean>>({});
+
   const openRoute = (to: { lat?: number | null; lon?: number | null }) => {
     if (!to.lat || !to.lon || !myPos) return;
     const [lon1, lat1] = myPos;
     const url = `https://yandex.ru/maps/?rtext=${lat1},${lon1}~${to.lat},${to.lon}&rtt=auto`;
     window.open(url, "_blank");
   };
+  const copyLink = (id: string) => {
+    const href = `${window.location.origin}/event/${id}`;
+    navigator.clipboard?.writeText(href).catch(() => {});
+  };
+
+  // подготовка списков и счётчиков
+  const withEvent = (mine || []).filter((a) => a.event);
+  const upcoming = withEvent.filter((a) => !isEventPast(a.event));
+  const past     = withEvent.filter((a) =>  isEventPast(a.event));
+
+  // сортировки
+  const sortByStartAsc  = (a: any, b: any) => new Date(a.event.startsAt).getTime() - new Date(b.event.startsAt).getTime();
+  const sortByStartDesc = (a: any, b: any) => new Date(b.event.startsAt).getTime() - new Date(a.event.startsAt).getTime();
+
+  const visible =
+    tab === "ALL" ? [...upcoming].sort(sortByStartAsc).concat([...past].sort(sortByStartDesc))
+    : tab === "UPCOMING" ? [...upcoming].sort(sortByStartAsc)
+    : [...past].sort(sortByStartDesc);
+
+  const Tab = ({ id, label, count }: { id: "UPCOMING" | "PAST" | "ALL"; label: string; count: number }) => (
+    <button
+      onClick={() => setTab(id)}
+      className={`rounded-md px-2 py-1 text-xs ${tab === id ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+    >
+      {label} {count}
+    </button>
+  );
+
+  const onDeleteEvent = async (eventId: string) => {
+    if (!eventId) return;
+    const yes = window.confirm("Удалить это событие? Действие нельзя отменить.");
+    if (!yes) return;
+
+    try {
+      setDeleting((m) => ({ ...m, [eventId]: true }));
+      // оптимистично уберём из «моих заявок» (на случай задержки сети)
+      useApplicationStore.getState().purgeByEvent(eventId);
+      // серверный DELETE; твой axios-интерсептор сам удалит событие из стора карт
+      await http.delete(`/event/${eventId}`);
+      // если по политике бэка организатор автоматически записывается участником —
+      // «мои заявки» уже очищены выше. Дополнительно можно подтянуть loadMine(), если хочешь.
+    } catch (e: any) {
+      alert(e?.response?.data?.message || e?.message || "Не удалось удалить событие");
+    } finally {
+      setDeleting((m) => ({ ...m, [eventId]: false }));
+    }
+  };
 
   return (
-<aside
-  className="
-    absolute left-3 top-3 z-30
-    w-[360px] max-w-[40vw]
-    inline-flex flex-col
-    overflow-hidden rounded-2xl
-    bg-white/95 shadow-xl backdrop-blur
-    max-h-[calc(100vh-24px)]   /* не выше экрана, с учётом отступов */
-  "
->
-  <div className="border-b px-4 py-3 text-sm font-semibold shrink-0">
-    Мои ближайшие тренировки
-  </div>
-  <div className="overflow-y-auto px-3 pb-4 pt-2">  {/* без h-full */}
-        {!mine?.length && (
-          <div className="m-3 rounded-lg border px-3 py-2 text-sm text-gray-600">Пока нет записей.</div>
+    <aside
+      className="
+        absolute left-3 top-3 z-30
+        w-[360px] max-w-[40vw]
+        inline-flex flex-col
+        overflow-hidden rounded-2xl
+        bg-white/95 shadow-xl backdrop-blur
+        max-h-[calc(100vh-24px)]
+      "
+    >
+      <div className="border-b px-4 py-3 text-sm font-semibold shrink-0">
+        Мои ближайшие тренировки
+      </div>
+
+      {/* табы */}
+      <div className="px-3 pt-2">
+        <div className="mb-2 flex flex-wrap items-center gap-1">
+          <Tab id="UPCOMING" label="Активные" count={upcoming.length} />
+          <Tab id="PAST"     label="Прошедшие" count={past.length} />
+          <Tab id="ALL"      label="Все" count={withEvent.length} />
+        </div>
+      </div>
+
+      <div className="overflow-y-auto px-3 pb-4">
+        {!withEvent.length && (
+          <div className="m-3 rounded-lg border px-3 py-2 text-sm text-gray-600">
+            Пока нет записей.
+          </div>
         )}
 
-        {mine?.map((a) => {
+        {visible.map((a) => {
           const e: any = a.event;
-          const when = e.startsAt || e.startDate || e.date;
+          const when = e.startsAt;
+          const human = humanizeStart(when);
           const timeLeft = when ? formatTimeLeft(when) : null;
           const orgId = e.organizerId || e.organizer?.id;
+          const pastEv = isEventPast(e);
+
+          const isOrganizer = meId && orgId && String(orgId).toLowerCase() === String(meId).toLowerCase();
+          const canWithdraw = !isOrganizer && (a.status === "PENDING" || a.status === "CONFIRMED" || a.status === "WAITLISTED");
 
           return (
             <div key={a.id} className="mb-3 rounded-xl border p-3 shadow-sm">
@@ -163,51 +300,89 @@ function MyTrainingsPanel({
                   <div className="text-sm font-semibold leading-snug">{e.title || "Без названия"}</div>
                   <div className="text-xs text-gray-500">
                     {(e.kind || "TRAINING").toString().toUpperCase() === "EVENT" ? "Событие" : "Тренировка"}
-                    {e.sport ? ` · ${e.sport}` : ""}
-                    {e.status ? ` · ${e.status}` : ""}
+                    {e.sport ? ` · ${e.sport}` : ""}{e.status ? ` · ${e.status}` : ""}{pastEv ? " · завершено" : ""}
                   </div>
                 </div>
-                <Pill>{a.status}</Pill>
+                <StatusBadge s={a.status} />
               </div>
 
-              {orgId && (
-                <div className="mb-1 text-xs">
-                  Организатор:{" "}
-                  <Link to={`/profile/${orgId}`} className="text-blue-600 hover:underline">
-                    профиль
-                  </Link>
-                </div>
-              )}
+              <div className="space-y-1 text-xs">
+                {orgId && (
+                  <div>
+                    Организатор:{" "}
+                    <Link to={`/profile/${orgId}`} className="text-blue-600 hover:underline">профиль</Link>
+                    {" · "}
+                    <Link to={`/chat?peerId=${orgId}&eventId=${e.id}`} className="text-gray-700 hover:underline">чат</Link>
+                  </div>
+                )}
+                {human && <div className="text-gray-800">{human}</div>}
+                {timeLeft && !pastEv && <div className="text-gray-600">{timeLeft}</div>}
+              </div>
 
-              {timeLeft && <div className="mb-2 text-xs text-gray-600">{timeLeft}</div>}
-
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <button
                   className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
                   onClick={() => openRoute({ lat: e.locationLat, lon: e.locationLon })}
+                  disabled={!e.locationLat || !e.locationLon || !myPos}
                 >
                   Маршрут
                 </button>
+
                 <Link to={`/event/${e.id}`} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
                   Подробнее
                 </Link>
-                {(a.status === "PENDING" || a.status === "CONFIRMED") && (
+
+                {!pastEv && (
+                  <>
+                    <button
+                      className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                      onClick={() => downloadIcsForEvent(e)}
+                    >
+                      В календарь
+                    </button>
+                    <button
+                      className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                      onClick={() => copyLink(e.id)}
+                      title="Скопировать ссылку"
+                    >
+                      Ссылка
+                    </button>
+                  </>
+                )}
+
+                {/* 👇 заменили «Отозвать» на «Удалить» для организатора */}
+                {isOrganizer ? (
                   <button
-                    className="ml-auto rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
-                    onClick={() => onWithdraw(e.id)}
+                    className="ml-auto rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
+                    onClick={() => onDeleteEvent(e.id)}
+                    disabled={!!deleting[e.id]}
+                    title="Удалить событие"
                   >
-                    Отозвать
+                    {deleting[e.id] ? "Удаление..." : "Удалить"}
                   </button>
+                ) : (
+                  canWithdraw && !pastEv && (
+                    <button
+                      className="ml-auto rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100"
+                      onClick={() => onWithdraw(e.id)}
+                    >
+                      Отозвать
+                    </button>
+                  )
                 )}
               </div>
             </div>
           );
         })}
       </div>
-      <div className="border-t px-4 py-2 text-[11px] text-gray-500">* максимум 3 активные тренировки без пересечений по времени</div>
+
+      <div className="border-t px-4 py-2 text-[11px] text-gray-500">
+        * максимум 3 активные тренировки без пересечений по времени
+      </div>
     </aside>
   );
 }
+
 
 /* ===================== RIGHT: Я организатор ===================== */
 
@@ -677,6 +852,7 @@ export default function MapPage() {
   const lastBoundsRef = useRef<YBounds | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
+  const prevEventIdsRef = useRef<Set<string>>(new Set());
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState>(null);
   const [dragPreview, setDragPreview] = useState<DragPreview>(null);
   const [createState, setCreateState] = useState<{ kind: "EVENT" | "TRAINING"; coords: LngLat } | null>(null);
@@ -715,6 +891,23 @@ export default function MapPage() {
   useEffect(() => {
     if (selected && !events.some((x) => x.id === selected.e.id)) setSelected(null);
   }, [events, selected]);
+
+// Когда событие пропало из стора — убрать его из "Моих тренировок"
+useEffect(() => {
+  const current = new Set((events as AppEvent[]).map(e => String(e.id).toLowerCase()));
+  const prev = prevEventIdsRef.current;
+
+  const removed: string[] = [];
+  prev.forEach((id) => { if (!current.has(id)) removed.push(id); });
+
+  if (removed.length > 0) {
+    const purge = useApplicationStore.getState().purgeByEvent;
+    removed.forEach((id) => purge(id));
+  }
+
+  prevEventIdsRef.current = current;
+}, [events]);
+
 
   const markers = useMemo(
     () => (events as AppEvent[]).filter((e) => e.locationLat != null && e.locationLon != null),
@@ -905,6 +1098,10 @@ export default function MapPage() {
           onCreated={(created) => {
             try { useEventStore.getState().add?.(created); } catch {}
             if (lastBoundsRef.current) handleBounds(lastBoundsRef.current);
+
+            // сразу подтянуть "Мои тренировки", если бэкенд делает организатора участником
+            loadMine().catch(() => {});
+
             setCreateState(null);
           }}
         />

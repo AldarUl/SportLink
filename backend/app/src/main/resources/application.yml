@@ -37,3 +37,11 @@ security:
     path: /api/v1/auth/refresh
     sameSite: Strict
     secure: true
+
+sportlink:
+  events:
+    cleanup-cron: "0 */5 * * * *"   # каждые 5 минут
+    retention-days: 7               # держим прошедшие 7 дней (0 — удалять сразу)
+    cleanup-batch-size: 500
+    end-grace-minutes: 10           # небольшой запас к фактическому окончанию
+

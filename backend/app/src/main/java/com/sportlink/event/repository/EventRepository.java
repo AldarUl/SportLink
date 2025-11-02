@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.OffsetDateTime;
 
 public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecificationExecutor<Event> {
 
@@ -24,4 +25,10 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from Event e where e.id = :id")
     Optional<Event> lockById(@Param("id") UUID id);
+
+    long countByOrganizerIdAndStatusNotAndStartsAtAfter(UUID organizerId, EventStatus status, OffsetDateTime after);
+
+    List<Event> findByOrganizerIdAndStatusNotAndStartsAtAfter(UUID organizerId, EventStatus status, OffsetDateTime after);
+
+    Page<Event> findByStartsAtBefore(OffsetDateTime cutoff, Pageable pageable);
 }
