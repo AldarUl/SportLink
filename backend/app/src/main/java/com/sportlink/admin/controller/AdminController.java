@@ -2,7 +2,7 @@ package com.sportlink.admin.controller;
 
 import com.sportlink.admin.dto.AdminSummary;
 import com.sportlink.admin.dto.AdminUser;
-import com.sportlink.admin.dto.AdminEvent;
+import com.sportlink.event.admin.dto.AdminEvent;
 import com.sportlink.admin.dto.PageResponse;
 import com.sportlink.admin.service.AdminService;
 import com.sportlink.event.model.EventStatus;

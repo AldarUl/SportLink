@@ -1,6 +1,6 @@
 package com.sportlink.admin.mapper;
 
-import com.sportlink.admin.dto.AdminEvent;
+import com.sportlink.event.admin.dto.AdminEvent;
 import com.sportlink.admin.dto.AdminUser;
 import com.sportlink.event.model.Event;
 import com.sportlink.user.model.User;

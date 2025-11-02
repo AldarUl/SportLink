@@ -1,6 +1,7 @@
 package com.sportlink.admin.service;
 
 import com.sportlink.admin.dto.*;
+import com.sportlink.event.admin.dto.AdminEvent;
 import com.sportlink.event.model.EventStatus;
 import org.springframework.data.domain.Pageable;
 

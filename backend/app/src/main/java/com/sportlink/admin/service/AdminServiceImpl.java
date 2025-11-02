@@ -3,6 +3,7 @@ package com.sportlink.admin.service;
 import com.sportlink.admin.dto.*;
 import com.sportlink.admin.mapper.AdminMapper;
 import com.sportlink.application.repository.ApplicationRepository;
+import com.sportlink.event.admin.dto.AdminEvent;
 import com.sportlink.event.model.Event;
 import com.sportlink.event.model.EventStatus;
 import com.sportlink.event.repository.EventRepository;

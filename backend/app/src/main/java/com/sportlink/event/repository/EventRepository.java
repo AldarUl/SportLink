@@ -44,4 +44,38 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
     Page<Event> findByOrganizerIdAndStartsAtAfter(UUID organizerId,
                                                   java.time.OffsetDateTime after,
                                                   Pageable pageable);
+
+    Page<Event> findByStatus(String status, Pageable pageable);
+
+    @Query(value = """
+        select * from event
+        where status = 'PUBLISHED'
+          and starts_at <= :now
+          and (starts_at + (duration_min || ' minutes')::interval) > :now
+        order by starts_at desc
+        """,
+            countQuery = """
+        select count(*) from event
+        where status = 'PUBLISHED'
+          and starts_at <= :now
+          and (starts_at + (duration_min || ' minutes')::interval) > :now
+        """,
+            nativeQuery = true)
+    Page<Event> findStarted(@Param("now") OffsetDateTime now, Pageable pageable);
+
+    @Query(value = """
+        select * from event
+        where status = 'PUBLISHED'
+          and (starts_at + (duration_min || ' minutes')::interval) <= :now
+        order by starts_at desc
+        """,
+            countQuery = """
+        select count(*) from event
+        where status = 'PUBLISHED'
+          and (starts_at + (duration_min || ' minutes')::interval) <= :now
+        """,
+            nativeQuery = true)
+    Page<Event> findFinished(@Param("now") OffsetDateTime now, Pageable pageable);
+
+
 }

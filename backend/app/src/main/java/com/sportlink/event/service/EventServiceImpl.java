@@ -6,6 +6,7 @@ import com.sportlink.event.dto.EventCreateRequest;
 import com.sportlink.event.dto.EventPage;
 import com.sportlink.event.dto.EventResponse;
 import com.sportlink.event.dto.EventUpdateRequest;
+import com.sportlink.event.mapper.EventMapper;
 import com.sportlink.event.model.*;
 import com.sportlink.event.repository.EventRepository;
 import com.sportlink.notification.service.NotificationService;
@@ -32,6 +33,7 @@ public class EventServiceImpl implements EventService {
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
     private final ApplicationRepository applicationRepository;
     private final NotificationService notificationService;
+    private final com.sportlink.event.mapper.EventMapper eventMapper;
 
     private static boolean overlaps(OffsetDateTime s1, Integer d1Min,
                                     OffsetDateTime s2, Integer d2Min) {
@@ -307,7 +309,6 @@ public class EventServiceImpl implements EventService {
         eventRepository.deleteById(id);
     }
 
-    // EventServiceImpl.java
     @Override
     @Transactional(readOnly = true)
     public EventPage my(UUID organizerId, boolean futureOnly, int page, int size) {
@@ -315,8 +316,6 @@ public class EventServiceImpl implements EventService {
         var pg = futureOnly
                 ? eventRepository.findByOrganizerIdAndStartsAtAfter(organizerId, OffsetDateTime.now(), pageable)
                 : eventRepository.findByOrganizerId(organizerId, pageable);
-
-        var content = pg.map(this::toDto).toList();
-        return new EventPage(content, pg.getNumber(), pg.getSize(), pg.getTotalElements(), pg.getTotalPages(), pg.isLast());
+        return eventMapper.toPage(pg);
     }
 }
