@@ -107,4 +107,16 @@ public class EventController {
     public void delete(@PathVariable UUID id, Authentication auth) {
         eventService.delete(id, currentUserId(auth));
     }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Мои события как организатора")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/my")
+    public EventPage my(
+            @RequestParam(defaultValue = "false") boolean futureOnly,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth
+    ) {
+        return eventService.my(currentUserId(auth), futureOnly, page, size);
+    }
 }

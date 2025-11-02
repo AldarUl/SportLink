@@ -34,4 +34,6 @@ public interface EventService {
     boolean hasFreeCapacity(UUID eventId);
 
     void delete(UUID id, UUID currentUserId);
+
+    EventPage my(UUID organizerId, boolean futureOnly, int page, int size);
 }

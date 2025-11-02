@@ -270,8 +270,7 @@ public class EventServiceImpl implements EventService {
     @Transactional(readOnly = true)
     public boolean hasFreeCapacity(UUID eventId) {
         var e = eventRepository.findById(eventId).orElseThrow();
-        // без лимита
-        if (e.getCapacity() == null || e.getCapacity() <= 0) return true;
+        if (e.getCapacity() == null) return true;
         long confirmed = applicationRepository.countByEventIdAndStatus(eventId, ApplicationStatus.CONFIRMED);
         return confirmed < e.getCapacity();
     }
@@ -306,5 +305,18 @@ public class EventServiceImpl implements EventService {
         // requireNotStarted(e);
 
         eventRepository.deleteById(id);
+    }
+
+    // EventServiceImpl.java
+    @Override
+    @Transactional(readOnly = true)
+    public EventPage my(UUID organizerId, boolean futureOnly, int page, int size) {
+        var pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "startsAt"));
+        var pg = futureOnly
+                ? eventRepository.findByOrganizerIdAndStartsAtAfter(organizerId, OffsetDateTime.now(), pageable)
+                : eventRepository.findByOrganizerId(organizerId, pageable);
+
+        var content = pg.map(this::toDto).toList();
+        return new EventPage(content, pg.getNumber(), pg.getSize(), pg.getTotalElements(), pg.getTotalPages(), pg.isLast());
     }
 }

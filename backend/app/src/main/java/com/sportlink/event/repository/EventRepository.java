@@ -39,5 +39,9 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
 
     Page<Event> findByStartsAtBefore(OffsetDateTime cutoff, Pageable pageable);
 
+    Page<Event> findByOrganizerId(UUID organizerId, Pageable pageable);
 
+    Page<Event> findByOrganizerIdAndStartsAtAfter(UUID organizerId,
+                                                  java.time.OffsetDateTime after,
+                                                  Pageable pageable);
 }
