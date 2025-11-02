@@ -32,4 +32,7 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     private Role role;
+
+    @Column(name = "avatar_url", length = 512)
+    private String avatarUrl;
 }

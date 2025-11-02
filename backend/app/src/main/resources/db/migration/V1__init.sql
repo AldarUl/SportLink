@@ -224,3 +224,5 @@ BEGIN
       ON DELETE SET NULL;
   END IF;
 END $$ LANGUAGE plpgsql;
+
+ALTER TABLE "user" ADD COLUMN avatar_url varchar(512);

@@ -14,6 +14,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import java.util.List;
 import java.util.UUID;
@@ -26,6 +28,7 @@ public class UserController {
     private final UserService userService;
     private final UserRepository userRepository;
     private final UserSportSkillRepository userSportSkillRepository;
+    private final AvatarService avatarService;
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Регистрация пользователя")
     @PostMapping
@@ -55,5 +58,30 @@ public class UserController {
         return userSportSkillRepository.findByUserId(id).stream()
                 .map(s -> new UserSkillResponse(s.getSport(), s.getLevel(), null))
                 .toList();
+    }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Загрузить аватар")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PostMapping(value = "/me/avatar", consumes = "multipart/form-data")
+    public UserResponse uploadAvatar(@RequestPart("file") MultipartFile file, Authentication auth) throws Exception {
+        UUID meId = userRepository.findByEmail(auth.getName()).orElseThrow().getId();
+        var u = userRepository.findById(meId).orElseThrow();
+        // по желанию — удалить старые версии
+        avatarService.deleteAll(meId);
+        String url = avatarService.store(meId, file);
+        u.setAvatarUrl(url);
+        u = userRepository.save(u);
+        return toDto(u);
+    }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Удалить аватар")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/me/avatar")
+    public void deleteAvatar(Authentication auth) throws Exception {
+        UUID meId = userRepository.findByEmail(auth.getName()).orElseThrow().getId();
+        var u = userRepository.findById(meId).orElseThrow();
+        avatarService.deleteAll(meId);
+        u.setAvatarUrl(null);
+        userRepository.save(u);
     }
 }
