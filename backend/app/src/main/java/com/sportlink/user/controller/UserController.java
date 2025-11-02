@@ -2,9 +2,11 @@ package com.sportlink.user.controller;
 
 import com.sportlink.user.dto.UserCreateRequest;
 import com.sportlink.user.dto.UserResponse;
+import com.sportlink.user.dto.UserSkillResponse;
 import com.sportlink.user.dto.UserUpdateRequest;
 import com.sportlink.user.model.User;
 import com.sportlink.user.repository.UserRepository;
+import com.sportlink.user.repository.UserSportSkillRepository;
 import com.sportlink.user.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -13,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @io.swagger.v3.oas.annotations.tags.Tag(name = "User", description = "Пользователи")
@@ -22,6 +25,7 @@ import java.util.UUID;
 public class UserController {
     private final UserService userService;
     private final UserRepository userRepository;
+    private final UserSportSkillRepository userSportSkillRepository;
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Регистрация пользователя")
     @PostMapping
@@ -43,5 +47,13 @@ public class UserController {
         String email = auth.getName();
         User me = userRepository.findByEmail(email).orElseThrow();
         return userService.updateMe(me.getId(), req);
+    }
+
+    // дополним UserController
+    @GetMapping("/{id}/skills")
+    public List<UserSkillResponse> skillsByUser(@PathVariable UUID id) {
+        return userSportSkillRepository.findByUserId(id).stream()
+                .map(s -> new UserSkillResponse(s.getSport(), s.getLevel(), null))
+                .toList();
     }
 }

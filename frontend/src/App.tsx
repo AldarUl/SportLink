@@ -11,6 +11,10 @@ import RegisterPage from "@/pages/RegisterPage";
 import EventCreatePage from "@/pages/EventCreatePage";
 import EventDetailPage from "@/pages/event/EventDetailPage";
 import EventEditPage from "@/pages/event/EventEditPage";
+import SkillsGate from "@/features/skills/SkillsGate";
+import ProfilePage from "@/pages/profile/ProfilePage";
+
+
 
 function Nav() {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -75,6 +79,7 @@ export default function App() {
   return (
     <div className="h-full flex flex-col">
       <Nav />
+      <SkillsGate />
       <div className="flex-1 min-h-0">
         <Routes>
           <Route path="/" element={<Navigate to="/map" replace />} />
@@ -87,7 +92,9 @@ export default function App() {
             <Route path="/map" element={<MapPage />} />
             <Route path="/event/new" element={<EventCreatePage />} />
             <Route path="/event/:id/edit" element={<EventEditPage />} />
+            <Route path="/profile" element={<ProfilePage />} />          {/* мой профиль */}
           </Route>
+          <Route path="/profile/:id" element={<ProfilePage />} />        {/* публичный профиль */}
           <Route path="*" element={<Navigate to="/map" replace />} />
         </Routes>
       </div>
