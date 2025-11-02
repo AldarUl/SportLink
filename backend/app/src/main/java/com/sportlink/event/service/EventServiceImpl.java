@@ -103,8 +103,8 @@ public class EventServiceImpl implements EventService {
             throw new IllegalArgumentException("registrationDeadline must be before startsAt");
 
         validateCoords(r.locationLat(), r.locationLon());
+        validateLevelRange(r.levelMin(), r.levelMax());
 
-        // 🔒 новые бизнес-правила
         ensureOrganizerLimit(organizerId);
         ensureNoOverlapOnCreate(organizerId, r.startsAt(), r.durationMin());
 
@@ -125,12 +125,13 @@ public class EventServiceImpl implements EventService {
                 .clubId(r.clubId())
                 .locationLat(r.locationLat())
                 .locationLon(r.locationLon())
+                .levelMin(r.levelMin())
+                .levelMax(r.levelMax())
                 .status(EventStatus.PUBLISHED)
                 .build();
 
         e = eventRepository.save(e);
 
-        // автозапись организатора (CONFIRMED) — как было
         try {
             if (!applicationRepository.existsByEventIdAndUserId(e.getId(), organizerId)) {
                 applicationRepository.save(
@@ -238,10 +239,16 @@ public class EventServiceImpl implements EventService {
             boolean isMember = clubMemberRepository.existsByClubIdAndUserId(e.getClubId(), currentUserId);
             if (!isMember) throw new IllegalArgumentException("Organizer must be a club member");
         }
+        if (u.levelMin() != null || u.levelMax() != null) {
+            Short newMin = (u.levelMin() != null) ? u.levelMin() : e.getLevelMin();
+            Short newMax = (u.levelMax() != null) ? u.levelMax() : e.getLevelMax();
+            validateLevelRange(newMin, newMax);
+            e.setLevelMin(newMin);
+            e.setLevelMax(newMax);
+        }
+
 
         validateCoords(e.getLocationLat(), e.getLocationLon());
-
-        // 🔒 запрет пересечений после применения апдейта
         ensureNoOverlapOnUpdate(e.getOrganizerId(), e.getId(), e.getStartsAt(), e.getDurationMin());
 
         e = eventRepository.save(e);
@@ -289,13 +296,9 @@ public class EventServiceImpl implements EventService {
     }
 
     private EventResponse toDto(Event e) {
-        return new EventResponse(
-                e.getId(), e.getKind(), e.getTitle(), e.getSport(), e.getDescription(),
-                e.getStartsAt(), e.getDurationMin(), e.getCapacity(), e.isWaitlistEnabled(),
-                e.getAccess(), e.getAdmission(), e.getRecurrenceRule(), e.getRegistrationDeadline(),
-                e.getOrganizerId(), e.getClubId(), e.getLocationLat(), e.getLocationLon(), e.getStatus()
-        );
+        return eventMapper.toResponse(e);
     }
+
 
     @Override
     public void delete(UUID id, UUID currentUserId) {
@@ -317,5 +320,16 @@ public class EventServiceImpl implements EventService {
                 ? eventRepository.findByOrganizerIdAndStartsAtAfter(organizerId, OffsetDateTime.now(), pageable)
                 : eventRepository.findByOrganizerId(organizerId, pageable);
         return eventMapper.toPage(pg);
+    }
+
+    private void validateLevelRange(Short min, Short max) {
+        if ((min == null) ^ (max == null)) {
+            throw new IllegalArgumentException("Both levelMin and levelMax must be set together or both null");
+        }
+        if (min != null) {
+            if (min < 1 || min > 5 || max < 1 || max > 5 || min > max) {
+                throw new IllegalArgumentException("Level range must be within 1..5 and levelMin <= levelMax");
+            }
+        }
     }
 }

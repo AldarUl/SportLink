@@ -11,6 +11,12 @@ spring:
     open-in-view: false
   flyway:
     enabled: true
+  messages:
+    basename: messages
+    encoding: UTF-8
+    use-code-as-default-message: true   # если ключ не найден, вернуть сам ключ
+    fallback-to-system-locale: false
+
 
 server:
   port: 8080

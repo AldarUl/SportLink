@@ -73,4 +73,10 @@ public class Event {
 
     @CreationTimestamp private Instant createdAt;
     @UpdateTimestamp private Instant updatedAt;
+
+    @Column(name = "level_min")
+    private Short levelMin;
+
+    @Column(name = "level_max")
+    private Short levelMax;
 }

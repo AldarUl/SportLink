@@ -10,6 +10,7 @@ import com.sportlink.event.model.EventAccess;
 import com.sportlink.event.model.EventAdmission;
 import com.sportlink.event.repository.EventRepository;
 import com.sportlink.notification.service.NotificationService;
+import com.sportlink.user.repository.UserSportSkillRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +29,7 @@ public class ApplicationServiceImpl implements ApplicationService {
     private final EventRepository eventRepo;
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
     private final NotificationService notificationService;
+    private final UserSportSkillRepository userSportSkillRepository;
 
     @Override
     public ApplicationResponse apply(UUID eventId, UUID userId) {
@@ -70,6 +72,23 @@ public class ApplicationServiceImpl implements ApplicationService {
             // уже есть активная/ожидающая/лист ожидания — просто вернуть
             return toDto(a);
         }
+
+        if (e.getLevelMin() != null && e.getLevelMax() != null) {
+            var lvlOpt = userSportSkillRepository
+                    .findByUserIdAndSportIgnoreCase(userId, e.getSport())
+                    .map(s -> s.getLevel());
+
+            if (lvlOpt.isEmpty()) {
+                throw new IllegalStateException("Укажите свой уровень по спорту " + e.getSport() + " в профиле");
+            }
+
+            short lvl = lvlOpt.get();
+            if (lvl < e.getLevelMin() || lvl > e.getLevelMax()) {
+                throw new IllegalStateException("Ваш уровень (" + lvl + ") не соответствует требованию события (" +
+                        e.getLevelMin() + "–" + e.getLevelMax() + ")");
+            }
+        }
+
 
         // новой заявки ещё нет — создаём
         ApplicationStatus target = computeTargetStatus(e);

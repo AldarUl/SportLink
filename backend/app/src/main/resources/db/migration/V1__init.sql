@@ -12,7 +12,7 @@ RETURNS text
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
-AS $$ SELECT lower(t) $$;
+AS $$ SELECT lower(t); $$;
 
 -- =========================
 -- Пользователи
@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS app_user (
     display_name  VARCHAR(120),
     password_hash VARCHAR(255) NOT NULL,
     role          VARCHAR(16)  NOT NULL DEFAULT 'USER',  -- USER | ADMIN
+    avatar_url   TEXT,
+    about        VARCHAR(400),
+    city         VARCHAR(64),
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ
 );
@@ -96,7 +99,7 @@ BEGIN
       FOREIGN KEY (club_id) REFERENCES club(id)
       ON DELETE SET NULL;
   END IF;
-END $$;
+END $$ LANGUAGE plpgsql;
 
 -- Индексы для ленты/поиска
 CREATE INDEX IF NOT EXISTS ix_event_starts            ON event(starts_at);
@@ -168,6 +171,50 @@ CREATE INDEX IF NOT EXISTS ix_refresh_token_user             ON refresh_token(us
 CREATE INDEX IF NOT EXISTS ix_refresh_token_expires          ON refresh_token(expires_at);
 CREATE INDEX IF NOT EXISTS ix_refresh_token_family_id        ON refresh_token(family_id);
 
+-- =========================
+-- Навыки пользователя по видам спорта
+-- =========================
+CREATE TABLE IF NOT EXISTS user_sport_skill (
+    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id    UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    sport      VARCHAR(64) NOT NULL,
+    level      SMALLINT    NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ,
+    CONSTRAINT chk_user_sport_level CHECK (level BETWEEN 1 AND 5)
+);
+
+-- case-insensitive уникальность по (user_id, sport)
+CREATE UNIQUE INDEX IF NOT EXISTS ux_user_sport_ci
+    ON user_sport_skill (user_id, immutable_lower(sport));
+
+
+CREATE INDEX IF NOT EXISTS ix_user_sport_user  ON user_sport_skill(user_id);
+CREATE INDEX IF NOT EXISTS ix_user_sport_sport ON user_sport_skill(immutable_lower(sport));
+
+
+-- =========================
+-- Доп.поля уровня у события
+-- =========================
+ALTER TABLE event
+  ADD COLUMN IF NOT EXISTS level_min SMALLINT,
+  ADD COLUMN IF NOT EXISTS level_max SMALLINT;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_event_level_range') THEN
+    ALTER TABLE event
+      ADD CONSTRAINT chk_event_level_range
+      CHECK (
+        (level_min IS NULL AND level_max IS NULL)
+        OR (level_min IS NOT NULL AND level_max IS NOT NULL AND
+            level_min BETWEEN 1 AND 5 AND level_max BETWEEN 1 AND 5 AND
+            level_min <= level_max)
+      );
+  END IF;
+END $$ LANGUAGE plpgsql;
+
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_refresh_token_replaced_by') THEN
@@ -176,4 +223,4 @@ BEGIN
       FOREIGN KEY (replaced_by) REFERENCES refresh_token(id)
       ON DELETE SET NULL;
   END IF;
-END $$;
+END $$ LANGUAGE plpgsql;

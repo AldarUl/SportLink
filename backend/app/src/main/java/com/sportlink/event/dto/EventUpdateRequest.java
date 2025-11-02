@@ -19,5 +19,7 @@ public record EventUpdateRequest(
         String recurrenceRule,
         OffsetDateTime registrationDeadline,
         Double locationLat,
-        Double locationLon
+        Double locationLon,
+        Short levelMin, // 1..5 или null
+        Short levelMax // 1..5 или null
 ) {}

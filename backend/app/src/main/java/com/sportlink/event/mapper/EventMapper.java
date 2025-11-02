@@ -32,7 +32,9 @@ public class EventMapper {
                 e.getClubId(),
                 e.getLocationLat(),
                 e.getLocationLon(),
-                resolveLiveStatus(e, OffsetDateTime.now())
+                resolveLiveStatus(e, OffsetDateTime.now()), // status
+                e.getLevelMin(),                            // NEW
+                e.getLevelMax()                             // NEW
         );
     }
 
@@ -59,7 +61,6 @@ public class EventMapper {
         var startsAt = e.getStartsAt();
         var dur = e.getDurationMin();
         if (startsAt == null || dur == null) {
-            // на всякий случай — отдаём то, что в БД
             return e.getStatus();
         }
         var endsAt = startsAt.plusMinutes(dur.longValue());

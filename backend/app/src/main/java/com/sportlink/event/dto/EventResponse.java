@@ -22,5 +22,7 @@ public record EventResponse(
         UUID clubId,
         Double locationLat,
         Double locationLon,
-        EventStatus status
+        EventStatus status,
+        Short levelMin, // 1..5 или null
+        Short levelMax // 1..5 или null
 ) {}
