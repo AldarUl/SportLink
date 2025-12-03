@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16
@@ -23,14 +25,21 @@ services:
       context: ./backend/app
       dockerfile: Dockerfile
     environment:
-      SPRING_PROFILES_ACTIVE: dev             # чтобы сидер отработал
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sportlink
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: password
       SECURITY_JWT_SECRET: change-me-very-long-random-secret-32b-min
       SECURITY_JWT_EXPIRATIONMS: 86400000
+      # путь, который использует AvatarServiceImpl
+      AVATARS_DIR: /data/avatars
     ports: ["8080:8080"]
     depends_on:
       db:
         condition: service_healthy
+    # постоянное хранилище для аватаров
+    volumes:
+      - ./storage/avatars:/data/avatars
+      # если у тебя SELinux, используй так:
+      # - ./storage/avatars:/data/avatars:z
     restart: unless-stopped
