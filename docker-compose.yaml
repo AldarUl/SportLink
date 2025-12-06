@@ -32,14 +32,30 @@ services:
       SECURITY_JWT_SECRET: change-me-very-long-random-secret-32b-min
       SECURITY_JWT_EXPIRATIONMS: 86400000
       # путь, который использует AvatarServiceImpl
-      AVATARS_DIR: /data/avatars
+#      AVATARS_DIR: /data/avatars
+      NEXTCLOUD_BASE_URL: http://nextcloud
+      NEXTCLOUD_USER: sportlink
+      NEXTCLOUD_PASSWORD: Sportlink123!
+      NEXTCLOUD_AVATARS_ROOT: /remote.php/dav/files/sportlink/SportLink/avatars
+
+      APP_FILES_ROOT: /tmp/sportlink-files
+
     ports: ["8080:8080"]
     depends_on:
       db:
         condition: service_healthy
     # постоянное хранилище для аватаров
-    volumes:
-      - ./storage/avatars:/data/avatars
+#    volumes:
+#      - ./storage/avatars:/data/avatars
       # если у тебя SELinux, используй так:
       # - ./storage/avatars:/data/avatars:z
     restart: unless-stopped
+
+  nextcloud:
+    image: nextcloud:latest
+    restart: unless-stopped
+    ports:
+      - "8081:80"             # Nextcloud будет доступен на http://localhost:8081
+    volumes:
+      - ./storage/nextcloud:/var/www/html       # данные самого Nextcloud
+#      - ./storage/avatars:/mnt/avatars          # ТА ЖЕ папка с аватарками, что и у backend

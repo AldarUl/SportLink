@@ -65,3 +65,8 @@ app:
   files:
     root: ./var
 
+nextcloud:
+  base-url: ${NEXTCLOUD_BASE_URL:http://localhost:8081}
+  username: ${NEXTCLOUD_USER:sportlink}
+  password: ${NEXTCLOUD_PASSWORD:secret}
+  avatars-root: ${NEXTCLOUD_AVATARS_ROOT:/remote.php/dav/files/sportlink/SportLink/avatars}
