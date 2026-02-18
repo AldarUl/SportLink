@@ -332,4 +332,33 @@ public class EventServiceImpl implements EventService {
             }
         }
     }
+
+    @Override
+    public EventResponse launch(UUID id, UUID currentUserId) {
+        Event e = eventRepository.findById(id)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found"));
+
+        requireOrganizer(e, currentUserId);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime starts = e.getStartsAt();
+        OffsetDateTime ends = e.getStartsAt().plusMinutes(e.getDurationMin().longValue());
+
+        // запускать можно только “во время” события
+        if (now.isBefore(starts)) {
+            throw new IllegalStateException("EVENT_NOT_STARTED_YET");
+        }
+        if (now.isAfter(ends)) {
+            throw new IllegalStateException("EVENT_ALREADY_FINISHED");
+        }
+
+        // idempotent
+        if (e.getLaunchedAt() == null) {
+            e.setLaunchedAt(now);
+            e.setLaunchedBy(currentUserId);
+            e = eventRepository.save(e);
+        }
+
+        return toDto(e);
+    }
 }

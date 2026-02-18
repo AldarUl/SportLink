@@ -37,8 +37,13 @@ public class ReviewController {
     @Operation(summary = "Отзывы по событию (с пагинацией и средней оценкой)")
     @GetMapping("/by-event/{eventId}")
     public ReviewPage byEvent(@PathVariable UUID eventId,
+                              @RequestParam(required = false) UUID targetId,
                               @RequestParam(defaultValue = "0") int page,
                               @RequestParam(defaultValue = "20") int size) {
+        // если targetId=null — вернёт все отзывы, иначе только по конкретному пользователю
+        if (reviewService instanceof com.sportlink.review.service.ReviewServiceImpl impl) {
+            return impl.listByEvent(eventId, targetId, page, size);
+        }
         return reviewService.listByEvent(eventId, page, size);
     }
 }

@@ -119,4 +119,14 @@ public class EventController {
     ) {
         return eventService.my(currentUserId(auth), futureOnly, page, size);
     }
+
+
+
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Запустить тренировку/событие (организатор)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/{id}/launch")
+    public EventResponse launch(@PathVariable UUID id, Authentication auth) {
+        return eventService.launch(id, currentUserId(auth));
+    }
 }

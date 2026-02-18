@@ -36,4 +36,6 @@ public interface EventService {
     void delete(UUID id, UUID currentUserId);
 
     EventPage my(UUID organizerId, boolean futureOnly, int page, int size);
+
+    EventResponse launch(UUID id, UUID currentUserId);
 }

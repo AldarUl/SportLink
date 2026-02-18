@@ -395,77 +395,112 @@ type AppRow = {
 };
 
 function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
+  const meId = useAuthStore((s) => s.user?.id || null);
+
   const [appsByEvent, setAppsByEvent] = React.useState<Record<string, AppRow[]>>({});
   const [panelOpen, setPanelOpen] = React.useState<Record<string, boolean>>({});
   const [loadingEvent, setLoadingEvent] = React.useState<Record<string, boolean>>({});
   const [rowPending, setRowPending] = React.useState<Record<string, boolean>>({});
   const [errors, setErrors] = React.useState<Record<string, string | null>>({});
 
-  // уже были: счётчики всех заявок (totalElements) для кнопки-тизера
-  const [counts, setCounts] = React.useState<Record<string, number>>({});
-
-  // фильтр (табы) по каждому событию
-  const [filters, setFilters] = React.useState<Record<string, "ALL" | "PENDING" | "CONFIRMED">>({});
+  // ✅ счётчик для кнопки "Показать заявки (N)" — только PENDING+WAITLISTED (без организатора)
+  const [requestCounts, setRequestCounts] = React.useState<Record<string, number>>({});
 
   // массовые операции — индикатор
   const [bulkBusy, setBulkBusy] = React.useState<Record<string, boolean>>({});
 
   const sortApps = (items: AppRow[]) =>
-    [...items].sort((a, b) => Number(b.status === "PENDING") - Number(a.status === "PENDING"));
+    [...items].sort((a, b) => Number(a.status === "PENDING") * -1 - Number(b.status === "PENDING") * -1);
 
-  const loadCount = React.useCallback(async (eventId: string) => {
+  const organizerIdOf = (e: any) => String(e?.organizerId ?? e?.organizer?.id ?? "");
+
+  const withoutOrganizer = (rows: AppRow[], organizerId: string) =>
+    rows.filter((a) => String(a.userId) !== String(organizerId));
+
+  const computeRequestCount = (rows: AppRow[]) =>
+    rows.filter((a) => a.status === "PENDING" || a.status === "WAITLISTED").length;
+
+  const prefetch = React.useCallback(async (e: any) => {
+    const evId = String(e.id);
+    const organizerId = organizerIdOf(e);
+
+    // уже есть данные или уже грузим
+    if (appsByEvent[evId] || loadingEvent[evId]) return;
+
+    setLoadingEvent((p) => ({ ...p, [evId]: true }));
     try {
-      const page = await applicationsByEvent(eventId, 0, 1);
-      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
-    } catch {/* no-op */}
-  }, []);
+      const page = await applicationsByEvent(evId, 0, 200);
+      const rowsRaw = (page.content ?? []) as AppRow[];
+      const rows = withoutOrganizer(rowsRaw, organizerId);
 
-  // подтягиваем счётчики для «моих» событий
-  React.useEffect(() => {
-    const ids = (myEvents || []).map((e: any) => String(e.id)).filter(Boolean);
-    ids.forEach((id) => { if (counts[id] === undefined) loadCount(id); });
-  }, [myEvents, counts, loadCount]);
-
-  const reload = React.useCallback(async (eventId: string) => {
-    setErrors((m) => ({ ...m, [eventId]: null }));
-    setLoadingEvent((p) => ({ ...p, [eventId]: true }));
-    try {
-      const page = await applicationsByEvent(eventId, 0, 50);
-      setAppsByEvent((m) => ({ ...m, [eventId]: sortApps(page.content as AppRow[]) }));
-      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
-      setPanelOpen((o) => ({ ...o, [eventId]: true }));
-    } catch (e: any) {
-      setErrors((m) => ({ ...m, [eventId]: e?.response?.data?.message || e?.message || "Не удалось загрузить заявки" }));
-      setPanelOpen((o) => ({ ...o, [eventId]: true }));
+      setAppsByEvent((m) => ({ ...m, [evId]: sortApps(rows) }));
+      setRequestCounts((m) => ({ ...m, [evId]: computeRequestCount(rows) }));
+      setErrors((m) => ({ ...m, [evId]: null }));
+    } catch (err: any) {
+      setErrors((m) => ({ ...m, [evId]: err?.response?.data?.message || err?.message || "Не удалось загрузить заявки" }));
     } finally {
-      setLoadingEvent((p) => ({ ...p, [eventId]: false }));
+      setLoadingEvent((p) => ({ ...p, [evId]: false }));
+    }
+  }, [appsByEvent, loadingEvent]);
+
+  // ✅ подгружаем данные заранее, чтобы подтверждённые участники показывались без нажатия
+  React.useEffect(() => {
+    (myEvents || []).forEach((e: any) => prefetch(e));
+  }, [myEvents, prefetch]);
+
+  const reloadAndOpen = React.useCallback(async (e: any) => {
+    const evId = String(e.id);
+    const organizerId = organizerIdOf(e);
+
+    setErrors((m) => ({ ...m, [evId]: null }));
+    setLoadingEvent((p) => ({ ...p, [evId]: true }));
+    try {
+      const page = await applicationsByEvent(evId, 0, 200);
+      const rowsRaw = (page.content ?? []) as AppRow[];
+      const rows = withoutOrganizer(rowsRaw, organizerId);
+
+      setAppsByEvent((m) => ({ ...m, [evId]: sortApps(rows) }));
+      setRequestCounts((m) => ({ ...m, [evId]: computeRequestCount(rows) }));
+      setPanelOpen((o) => ({ ...o, [evId]: true }));
+    } catch (err: any) {
+      setErrors((m) => ({ ...m, [evId]: err?.response?.data?.message || err?.message || "Не удалось загрузить заявки" }));
+      setPanelOpen((o) => ({ ...o, [evId]: true }));
+    } finally {
+      setLoadingEvent((p) => ({ ...p, [evId]: false }));
     }
   }, []);
 
-  const act = React.useCallback(async (appId: string, action: "confirm" | "decline", eventId: string) => {
+  const act = React.useCallback(async (appId: string, action: "confirm" | "decline", e: any) => {
+    const evId = String(e.id);
+    const organizerId = organizerIdOf(e);
+
     setRowPending((rp) => ({ ...rp, [appId]: true }));
     try {
       if (action === "confirm") await apiConfirm(appId);
       else await apiDecline(appId);
-      const page = await applicationsByEvent(eventId, 0, 50);
-      setAppsByEvent((m) => ({ ...m, [eventId]: sortApps(page.content as AppRow[]) }));
-      setCounts((m) => ({ ...m, [eventId]: page.totalElements ?? (page.content?.length ?? 0) }));
-    } catch (e: any) {
-      setErrors((m) => ({ ...m, [eventId]: e?.response?.data?.message || e?.message || "Операция не удалась" }));
+
+      const page = await applicationsByEvent(evId, 0, 200);
+      const rowsRaw = (page.content ?? []) as AppRow[];
+      const rows = withoutOrganizer(rowsRaw, organizerId);
+
+      setAppsByEvent((m) => ({ ...m, [evId]: sortApps(rows) }));
+      setRequestCounts((m) => ({ ...m, [evId]: computeRequestCount(rows) }));
+    } catch (err: any) {
+      setErrors((m) => ({ ...m, [evId]: err?.response?.data?.message || err?.message || "Операция не удалась" }));
     } finally {
       setRowPending((rp) => ({ ...rp, [appId]: false }));
     }
   }, []);
 
-  // ui атом
-  const TabBtn = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
-    <button
-      onClick={onClick}
-      className={`rounded-md px-2 py-1 text-xs ${active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
-    >
-      {children}
-    </button>
-  );
+  const statusRu = (s: string) => {
+    switch (s) {
+      case "PENDING": return "На рассмотрении";
+      case "WAITLISTED": return "В листе ожидания";
+      case "CONFIRMED": return "Подтвержден";
+      case "DECLINED": return "Отклонен";
+      default: return s;
+    }
+  };
 
   return (
     <aside
@@ -489,61 +524,58 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
 
         {myEvents?.map((e: any) => {
           const evId = String(e.id);
-          const opened  = panelOpen[evId];
-          const loading = loadingEvent[evId];
+          const opened  = !!panelOpen[evId];
+          const loading = !!loadingEvent[evId];
           const err     = errors[evId];
-          const apps    = appsByEvent[evId] || [];
-          const tab     = filters[evId] || "ALL";
+
+          const apps = appsByEvent[evId] || [];
+
+          // capacity/waitlist
+          const capacity: number | null =
+            typeof e.capacity === "number" && e.capacity > 0 ? e.capacity : null;
+          const waitlistEnabled = !!e.waitlistEnabled;
+
+          const confirmed = apps.filter(a => a.status === "CONFIRMED");
+          const waiting   = apps.filter(a => a.status === "PENDING" || a.status === "WAITLISTED");
+          const declined  = apps.filter(a => a.status === "DECLINED");
+
+          const confirmedCount = confirmed.length;
+          const waitingCount   = waiting.length;
+          const declinedCount  = declined.length;
+
+          const full      = capacity !== null && confirmedCount >= capacity;
+          const available = capacity === null ? Infinity : Math.max(0, capacity - confirmedCount);
 
           // время/правила
           const now = Date.now();
           const startsAtTs = e.startsAt ? new Date(e.startsAt).getTime() : NaN;
-          const regTs      = e.registrationDeadline ? new Date(e.registrationDeadline).getTime() : NaN;
           const started    = Number.isFinite(startsAtTs) && now >= startsAtTs;
-          const closed     = Number.isFinite(regTs) && now >= regTs && !started;
 
-          // capacity/waitlist
-          const capacity: number | null =
-            typeof e.capacity === "number" && e.capacity > 0 ? e.capacity : null; // null = безлимит
-          const waitlistEnabled = !!e.waitlistEnabled;
+          // ✅ вот тут главное: кнопка считает только pending+waitlist (без организатора)
+          const teaserCount = requestCounts[evId] ?? waitingCount;
 
-          const confirmedCount = apps.filter(a => a.status === "CONFIRMED").length;
-          const pendingCount   = apps.filter(a => a.status === "PENDING").length;
-          const full           = capacity !== null && confirmedCount >= capacity;
-          const available      = capacity === null ? Infinity : Math.max(0, capacity - confirmedCount);
-
-          // фильтрация по табам
-          const visibleApps = apps.filter(a =>
-            tab === "ALL" ? true : (tab === "PENDING" ? a.status === "PENDING" : a.status === "CONFIRMED")
-          );
-
-          // массовые действия
           const busy = !!bulkBusy[evId];
-          const canBulkConfirm = !started && pendingCount > 0 && available > 0;
-          const canBulkDecline = !started && pendingCount > 0;
 
           const doBulkConfirm = async () => {
             setBulkBusy((b) => ({ ...b, [evId]: true }));
             try {
-              const toConfirm = apps.filter(a => a.status === "PENDING").slice(0, available === Infinity ? apps.length : available);
+              const toConfirm = waiting.slice(0, available === Infinity ? waiting.length : available);
               await Promise.allSettled(toConfirm.map(a => apiConfirm(a.id)));
-              await reload(evId);
-            } finally {
-              setBulkBusy((b) => ({ ...b, [evId]: false }));
-            }
-          };
-          const doBulkDecline = async () => {
-            setBulkBusy((b) => ({ ...b, [evId]: true }));
-            try {
-              const toDecline = apps.filter(a => a.status === "PENDING");
-              await Promise.allSettled(toDecline.map(a => apiDecline(a.id)));
-              await reload(evId);
+              await reloadAndOpen(e);
             } finally {
               setBulkBusy((b) => ({ ...b, [evId]: false }));
             }
           };
 
-          const countTeaser = counts[evId] ?? (apps?.length ?? 0);
+          const doBulkDecline = async () => {
+            setBulkBusy((b) => ({ ...b, [evId]: true }));
+            try {
+              await Promise.allSettled(waiting.map(a => apiDecline(a.id)));
+              await reloadAndOpen(e);
+            } finally {
+              setBulkBusy((b) => ({ ...b, [evId]: false }));
+            }
+          };
 
           return (
             <div key={evId} className="mb-3 rounded-xl border p-3 shadow-sm">
@@ -555,15 +587,14 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
                     {e.sport ? ` · ${e.sport}` : ""}{e.status ? ` · ${e.status}` : ""}
                   </div>
 
-                  {/* сводка по набору */}
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-600">
                     <span>
                       Подтверждено: <b>{confirmedCount}</b>{capacity !== null ? `/${capacity}` : ""}
                     </span>
                     <span className="mx-1">·</span>
-                    <span>В ожидании: <b>{pendingCount}</b></span>
+                    <span>Лист ожидания: <b>{waitingCount}</b></span>
+
                     {full && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Мест нет</span>}
-                    {closed && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">Набор закрыт</span>}
                     {started && <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">Событие началось</span>}
                     {waitlistEnabled && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">Лист ожидания</span>}
                   </div>
@@ -574,12 +605,52 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
                 </Link>
               </div>
 
-              {/* раскрыть/скрыть */}
+              {/* ✅ Подтвержденные участники ВСЕГДА (вне кнопки) */}
+              <div className="mt-2 space-y-2">
+                <div className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-800">
+                  Подтвержденные участники {confirmedCount}
+                </div>
+
+                {loading && !appsByEvent[evId] ? (
+                  <div className="text-xs text-gray-500">Загрузка...</div>
+                ) : confirmedCount === 0 ? (
+                  <div className="rounded-md border px-2 py-2 text-xs text-gray-600">Список пуст.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {confirmed.map((a) => {
+                      const disabledRow = !!rowPending[a.id];
+                      return (
+                        <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-2">
+                          <div className="leading-tight">
+                            <UserInline userId={a.userId} />
+                            <div className="text-[11px] text-gray-500">Статус: {statusRu(a.status)}</div>
+                          </div>
+
+                          <button
+                            disabled={disabledRow || started}
+                            className={`w-[140px] rounded-md px-2 py-1 text-xs ${
+                              disabledRow || started
+                                ? "cursor-not-allowed bg-gray-50 text-gray-500"
+                                : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                            }`}
+                            onClick={() => act(a.id, "decline", e)}
+                            title={started ? "Событие уже началось" : "Исключить участника (Отклонить)"}
+                          >
+                            Исключить
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ✅ Кнопка показывает только ЗАЯВКИ (pending+waitlist) и отклоненные */}
               <button
-                className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
-                onClick={() => (opened ? setPanelOpen({ ...panelOpen, [evId]: false }) : reload(evId))}
+                className="mt-3 mb-2 rounded-lg bg-gray-50 px-2 py-1 text-xs hover:bg-gray-100"
+                onClick={() => (opened ? setPanelOpen({ ...panelOpen, [evId]: false }) : reloadAndOpen(e))}
               >
-                {loading ? "Загрузка..." : opened ? "Скрыть заявки" : `Показать заявки (${countTeaser})`}
+                {loading ? "Загрузка..." : opened ? "Скрыть заявки" : `Показать заявки (${teaserCount})`}
               </button>
 
               {opened && (
@@ -590,135 +661,104 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
 
                   {!err && (
                     <>
-                      {/* табы + массовые действия */}
-                      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-1">
-                          <TabBtn active={tab === "ALL"} onClick={() => setFilters((f) => ({ ...f, [evId]: "ALL" }))}>
-                            Все {apps.length}
-                          </TabBtn>
-                          <TabBtn active={tab === "PENDING"} onClick={() => setFilters((f) => ({ ...f, [evId]: "PENDING" }))}>
-                            В ожидании {pendingCount}
-                          </TabBtn>
-                          <TabBtn active={tab === "CONFIRMED"} onClick={() => setFilters((f) => ({ ...f, [evId]: "CONFIRMED" }))}>
-                            Подтверждённые {confirmedCount}
-                          </TabBtn>
-                        </div>
+                      {/* массовые действия */}
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          disabled={busy || started || waitingCount === 0 || available <= 0}
+                          className={`rounded-md px-2 py-1 text-xs ${
+                            busy || started || waitingCount === 0 || available <= 0
+                              ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
+                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          }`}
+                          onClick={doBulkConfirm}
+                        >
+                          Подтвердить всех (в пределах мест)
+                        </button>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            disabled={busy || !canBulkConfirm}
-                            title={
-                              started ? "Событие уже началось"
-                                : available === 0 ? "Свободных мест нет"
-                                : pendingCount === 0 ? "Нет ожидающих"
-                                : "Подтвердить ожидающих в рамках свободных мест"
-                            }
-                            onClick={doBulkConfirm}
-                            className={`rounded-md px-2 py-1 text-xs ${
-                              busy || !canBulkConfirm
-                                ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
-                                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            }`}
-                          >
-                            Подтвердить всех
-                          </button>
-                          <button
-                            disabled={busy || !canBulkDecline}
-                            title={started ? "Событие уже началось" : pendingCount === 0 ? "Нет ожидающих" : "Отклонить всех ожидающих"}
-                            onClick={doBulkDecline}
-                            className={`rounded-md px-2 py-1 text-xs ${
-                              busy || !canBulkDecline
-                                ? "cursor-not-allowed bg-red-50 text-red-600/50"
-                                : "bg-red-50 text-red-600 hover:bg-red-100"
-                            }`}
-                          >
-                            Отклонить всех
-                          </button>
-                        </div>
+                        <button
+                          disabled={busy || started || waitingCount === 0}
+                          className={`rounded-md px-2 py-1 text-xs ${
+                            busy || started || waitingCount === 0
+                              ? "cursor-not-allowed bg-red-50 text-red-600/50"
+                              : "bg-red-50 text-red-600 hover:bg-red-100"
+                          }`}
+                          onClick={doBulkDecline}
+                        >
+                          Отклонить всех
+                        </button>
                       </div>
 
-                      {/* список */}
-                      {!visibleApps.length && (
+                      <div className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-800">
+                        Заявки (на рассмотрении + лист ожидания) {waitingCount}
+                      </div>
+
+                      {!waiting.length && (
                         <div className="rounded-md border px-2 py-2 text-xs text-gray-600">Список пуст.</div>
                       )}
 
-                      {visibleApps.map((a) => {
-                        const isPending   = a.status === "PENDING";
-                        const isConfirmed = a.status === "CONFIRMED";
+                      {waiting.map((a) => {
                         const disabledRow = !!rowPending[a.id];
+                        const canConfirm =
+                          !disabledRow &&
+                          !started &&
+                          (capacity === null || confirmedCount < capacity);
 
-                        // блокируем действия после старта; confirm — ещё и при полном зале
-                        const canConfirm = isPending && !disabledRow && !started && (capacity === null || confirmedCount < capacity);
-                        const canDecline = (isPending || isConfirmed) && !disabledRow && !started;
+                        const canDecline = !disabledRow && !started;
 
                         return (
                           <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-2">
                             <div className="leading-tight">
                               <UserInline userId={a.userId} />
-                              <div className="text-[11px] text-gray-500">Статус: {a.status}</div>
+                              <div className="text-[11px] text-gray-500">Статус: {statusRu(a.status)}</div>
                             </div>
 
-                            <div className="flex items-center gap-2">
-                              {/* Стабильная заглушка чата */}
-                              <Link
-                                to={`/chat?peerId=${a.userId}&eventId=${evId}`}
-                                className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
+                            <div className="flex flex-col items-end gap-1">
+                              <button
+                                disabled={!canConfirm}
+                                className={`w-[140px] rounded-md px-2 py-1 text-xs ${
+                                  !canConfirm
+                                    ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
+                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                }`}
+                                onClick={() => act(a.id, "confirm", e)}
+                                title={started ? "Событие уже началось" : full ? "Свободных мест нет" : "Подтвердить участие"}
                               >
-                                Чат
-                              </Link>
+                                Подтвердить
+                              </button>
 
-                              {isPending && (
-                                <>
-                                  <button
-                                    disabled={!canConfirm}
-                                    title={
-                                      started ? "Событие уже началось"
-                                        : full ? "Свободных мест нет"
-                                        : "Подтвердить участие"
-                                    }
-                                    className={`rounded-md px-2 py-1 text-xs ${
-                                      !canConfirm
-                                        ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
-                                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                    }`}
-                                    onClick={() => act(a.id, "confirm", evId)}
-                                  >
-                                    Подтвердить
-                                  </button>
-                                  <button
-                                    disabled={!canDecline}
-                                    title={started ? "Событие уже началось" : "Отклонить заявку"}
-                                    className={`rounded-md px-2 py-1 text-xs ${
-                                      !canDecline
-                                        ? "cursor-not-allowed bg-red-50 text-red-600/50"
-                                        : "bg-red-50 text-red-600 hover:bg-red-100"
-                                    }`}
-                                    onClick={() => act(a.id, "decline", evId)}
-                                  >
-                                    Отклонить
-                                  </button>
-                                </>
-                              )}
-
-                              {/* «Исключить» подтверждённого участника */}
-                              {isConfirmed && (
-                                <button
-                                  disabled={!canDecline}
-                                  title={started ? "Событие уже началось" : "Исключить участника (DECLINED)"}
-                                  className={`rounded-md px-2 py-1 text-xs ${
-                                    !canDecline
-                                      ? "cursor-not-allowed bg-gray-50 text-gray-500"
-                                      : "bg-gray-50 text-gray-700 hover:bg-gray-100"
-                                  }`}
-                                  onClick={() => act(a.id, "decline", evId)}
-                                >
-                                  Исключить
-                                </button>
-                              )}
+                              <button
+                                disabled={!canDecline}
+                                className={`w-[140px] rounded-md px-2 py-1 text-xs ${
+                                  !canDecline
+                                    ? "cursor-not-allowed bg-red-50 text-red-600/50"
+                                    : "bg-red-50 text-red-600 hover:bg-red-100"
+                                }`}
+                                onClick={() => act(a.id, "decline", e)}
+                                title={started ? "Событие уже началось" : "Отклонить заявку"}
+                              >
+                                Отклонить
+                              </button>
                             </div>
                           </div>
                         );
                       })}
+
+                      <div className="rounded-md bg-gray-100 px-3 py-2 text-sm font-medium text-gray-800">
+                        Отклоненные {declinedCount}
+                      </div>
+
+                      {!declined.length && (
+                        <div className="rounded-md border px-2 py-2 text-xs text-gray-600">Список пуст.</div>
+                      )}
+
+                      {declined.map((a) => (
+                        <div key={a.id} className="flex items-center justify-between gap-2 rounded-md border px-2 py-2">
+                          <div className="leading-tight">
+                            <UserInline userId={a.userId} />
+                            <div className="text-[11px] text-gray-500">Статус: {statusRu(a.status)}</div>
+                          </div>
+                        </div>
+                      ))}
                     </>
                   )}
                 </div>
@@ -730,6 +770,8 @@ function OrganizerPanel({ myEvents }: { myEvents: AppEvent[] }) {
     </aside>
   );
 }
+
+
 
 
 /* ===================== BOTTOM: Dock (круглые drag-кнопки) ===================== */

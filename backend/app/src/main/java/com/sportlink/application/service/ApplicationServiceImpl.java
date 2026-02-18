@@ -131,12 +131,17 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         requireOrganizer(e, organizerId);
 
+        var now = OffsetDateTime.now();
+        if (e.getStartsAt().isBefore(now)) {
+            throw new IllegalStateException("Event already started");
+        }
+
+        // Идемпотентность
         if (a.getStatus() == ApplicationStatus.CONFIRMED) {
             return toDto(a);
         }
-        if (a.getStatus() == ApplicationStatus.DECLINED) {
-            throw new IllegalStateException("Already declined");
-        }
+
+        // ❗ВАЖНО: больше НЕ запрещаем confirm после DECLINED
 
         Integer cap = e.getCapacity();
         if (cap != null) {
@@ -152,6 +157,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         return toDto(a);
     }
 
+
     @Override
     public ApplicationResponse decline(UUID applicationId, UUID organizerId) {
         Application a = appRepo.findById(applicationId)
@@ -162,6 +168,11 @@ public class ApplicationServiceImpl implements ApplicationService {
                 .orElseThrow(() -> new EntityNotFoundException("Event not found"));
 
         requireOrganizer(e, organizerId);
+
+        var now = OffsetDateTime.now();
+        if (e.getStartsAt().isBefore(now)) {
+            throw new IllegalStateException("Event already started");
+        }
 
         if (a.getStatus() == ApplicationStatus.DECLINED) {
             return toDto(a);
@@ -177,6 +188,7 @@ public class ApplicationServiceImpl implements ApplicationService {
         notificationService.applicationDeclined(e.getId(), a.getUserId());
         return toDto(a);
     }
+
 
     @Override
     @Transactional(readOnly = true)

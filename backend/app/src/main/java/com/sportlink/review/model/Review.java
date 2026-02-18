@@ -30,4 +30,7 @@ public class Review {
 
     @CreationTimestamp
     private Instant createdAt;
+
+    @Column(name = "target_id", columnDefinition = "uuid")
+    private UUID targetId;
 }

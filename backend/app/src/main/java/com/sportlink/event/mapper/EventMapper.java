@@ -34,7 +34,9 @@ public class EventMapper {
                 e.getLocationLon(),
                 resolveLiveStatus(e, OffsetDateTime.now()), // status
                 e.getLevelMin(),                            // NEW
-                e.getLevelMax()                             // NEW
+                e.getLevelMax(),                             // NEW
+                e.getLaunchedAt(),
+                e.getLaunchedBy()
         );
     }
 

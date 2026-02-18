@@ -168,3 +168,9 @@ export async function fetchEventsByBbox(
 export async function deleteEvent(id: string): Promise<void> {
   await http.delete(`/event/${id}`);
 }
+
+
+export async function launchEvent(id: string) {
+  const { data } = await http.post(`/event/${id}/launch`);
+  return toEvent(data);
+}

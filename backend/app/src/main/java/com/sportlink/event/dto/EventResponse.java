@@ -24,5 +24,8 @@ public record EventResponse(
         Double locationLon,
         EventStatus status,
         Short levelMin, // 1..5 или null
-        Short levelMax // 1..5 или null
+        Short levelMax, // 1..5 или null
+
+        OffsetDateTime launchedAt,
+        UUID launchedBy
 ) {}

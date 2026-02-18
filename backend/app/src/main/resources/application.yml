@@ -58,7 +58,7 @@ sportlink:
     # через сколько дней после окончания чистить FINISHED
     retentionDays: 30
     # можно выключить обработчик (например, для профиля разработки)
-    lifecycleEnabled: true
+    lifecycleEnabled: false
 
 # где хранить файлы (AvatarServiceImpl читает app.files.root)
 app:

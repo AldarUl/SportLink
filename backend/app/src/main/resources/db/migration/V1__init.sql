@@ -225,4 +225,52 @@ BEGIN
   END IF;
 END $$ LANGUAGE plpgsql;
 
-ALTER TABLE app_user ADD COLUMN IF NOT EXISTS avatar_url varchar(512);
+ALTER TABLE event
+  ADD COLUMN IF NOT EXISTS launched_at TIMESTAMPTZ;
+
+ALTER TABLE event
+  ADD COLUMN IF NOT EXISTS launched_by UUID REFERENCES app_user(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS ix_event_launched_at ON event(launched_at);
+
+CREATE TABLE IF NOT EXISTS attendance (
+    id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_id   UUID NOT NULL REFERENCES event(id) ON DELETE CASCADE,
+    user_id    UUID NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
+    status     VARCHAR(16) NOT NULL,
+    marked_by  UUID REFERENCES app_user(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ux_attendance_event_user') THEN
+    ALTER TABLE attendance
+      ADD CONSTRAINT ux_attendance_event_user UNIQUE (event_id, user_id);
+  END IF;
+END $$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_attendance_status') THEN
+    ALTER TABLE attendance
+      ADD CONSTRAINT chk_attendance_status CHECK (status IN ('ATTENDED','ABSENT'));
+  END IF;
+END $$ LANGUAGE plpgsql;
+
+CREATE INDEX IF NOT EXISTS ix_attendance_event ON attendance(event_id);
+
+
+ALTER TABLE review
+  ADD COLUMN IF NOT EXISTS target_id UUID REFERENCES app_user(id) ON DELETE CASCADE;
+
+ALTER TABLE review
+  DROP CONSTRAINT IF EXISTS ux_review_event_author;
+
+ALTER TABLE review
+  ADD CONSTRAINT ux_review_event_author_target UNIQUE (event_id, author_id, target_id);
+
+CREATE INDEX IF NOT EXISTS ix_review_target ON review(target_id);
+
+

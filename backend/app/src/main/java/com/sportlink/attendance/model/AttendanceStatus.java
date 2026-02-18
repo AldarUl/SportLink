@@ -1,4 +1,5 @@
 package com.sportlink.attendance.model;
 
-public class AttendanceStatus {
+public enum AttendanceStatus {
+    ATTENDED, ABSENT
 }

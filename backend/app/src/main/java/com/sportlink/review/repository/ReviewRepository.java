@@ -9,10 +9,13 @@ import org.springframework.data.repository.query.Param;
 import java.util.UUID;
 
 public interface ReviewRepository extends JpaRepository<Review, UUID> {
+
     Page<Review> findByEventId(UUID eventId, Pageable pageable);
+    Page<Review> findByEventIdAndTargetId(UUID eventId, UUID targetId, Pageable pageable);
 
-    boolean existsByEventIdAndAuthorId(UUID eventId, UUID authorId);
+    boolean existsByEventIdAndAuthorIdAndTargetId(UUID eventId, UUID authorId, UUID targetId);
 
-    @Query("select avg(r.rating) from Review r where r.eventId = :eventId")
-    Double averageRating(@Param("eventId") UUID eventId);
+    @Query("select avg(r.rating) from Review r " +
+            "where r.eventId = :eventId and (:targetId is null or r.targetId = :targetId)")
+    Double averageRating(@Param("eventId") UUID eventId, @Param("targetId") UUID targetId);
 }

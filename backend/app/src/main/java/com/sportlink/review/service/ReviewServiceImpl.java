@@ -2,6 +2,8 @@ package com.sportlink.review.service;
 
 import com.sportlink.application.model.ApplicationStatus;
 import com.sportlink.application.repository.ApplicationRepository;
+import com.sportlink.attendance.model.AttendanceStatus;
+import com.sportlink.attendance.repository.AttendanceRepository;
 import com.sportlink.event.model.Event;
 import com.sportlink.event.repository.EventRepository;
 import com.sportlink.review.dto.*;
@@ -24,6 +26,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewRepository reviewRepo;
     private final EventRepository eventRepo;
     private final ApplicationRepository appRepo;
+    private final AttendanceRepository attendanceRepo;
 
     @Override
     public ReviewResponse create(UUID authorId, ReviewCreateRequest req) {
@@ -36,21 +39,50 @@ public class ReviewServiceImpl implements ReviewService {
             throw new IllegalStateException("Event not finished yet");
         }
 
-        // автор должен быть подтверждённым участником
+        // автор должен быть CONFIRMED участником (организатор у тебя всегда confirmed при создании)
         boolean participated = appRepo.existsByEventIdAndUserIdAndStatus(
                 e.getId(), authorId, ApplicationStatus.CONFIRMED);
         if (!participated) {
-            throw new org.springframework.security.access.AccessDeniedException("Only participants can leave a review");
+            throw new org.springframework.security.access.AccessDeniedException("Only confirmed participants can leave a review");
         }
 
-        // один отзыв на пользователя
-        if (reviewRepo.existsByEventIdAndAuthorId(e.getId(), authorId)) {
+        // если автор отметил себя ABSENT — отзыв нельзя
+        attendanceRepo.findByEventIdAndUserId(e.getId(), authorId).ifPresent(a -> {
+            if (a.getStatus() == AttendanceStatus.ABSENT) {
+                throw new IllegalStateException("ABSENT_CANNOT_REVIEW");
+            }
+        });
+
+        boolean isOrganizer = e.getOrganizerId().equals(authorId);
+
+        // правила "кто кого"
+        if (!isOrganizer) {
+            // участник может оценить только организатора
+            if (!req.targetId().equals(e.getOrganizerId())) {
+                throw new IllegalArgumentException("Participant can review only organizer");
+            }
+        } else {
+            // организатор оценивает участников (кроме себя)
+            if (req.targetId().equals(authorId)) {
+                throw new IllegalArgumentException("Organizer cannot review self");
+            }
+            boolean targetIsConfirmed = appRepo.existsByEventIdAndUserIdAndStatus(
+                    e.getId(), req.targetId(), ApplicationStatus.CONFIRMED
+            );
+            if (!targetIsConfirmed) {
+                throw new IllegalArgumentException("Target must be a confirmed participant of this event");
+            }
+        }
+
+        // один отзыв на пару (event, author, target)
+        if (reviewRepo.existsByEventIdAndAuthorIdAndTargetId(e.getId(), authorId, req.targetId())) {
             throw new IllegalStateException("Review already exists");
         }
 
         Review r = reviewRepo.save(Review.builder()
                 .eventId(e.getId())
                 .authorId(authorId)
+                .targetId(req.targetId())
                 .rating(req.rating())
                 .comment(req.comment())
                 .build());
@@ -61,13 +93,27 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional(readOnly = true)
     public ReviewPage listByEvent(UUID eventId, int page, int size) {
-        var p = reviewRepo.findByEventId(eventId, PageRequest.of(page, size));
+        return listByEvent(eventId, null, page, size);
+    }
+
+    @Transactional(readOnly = true)
+    public ReviewPage listByEvent(UUID eventId, UUID targetId, int page, int size) {
+        var pageable = PageRequest.of(page, size);
+
+        var p = (targetId == null)
+                ? reviewRepo.findByEventId(eventId, pageable)
+                : reviewRepo.findByEventIdAndTargetId(eventId, targetId, pageable);
+
         var content = p.map(this::toDto).toList();
-        Double avg = reviewRepo.averageRating(eventId);
+        Double avg = reviewRepo.averageRating(eventId, targetId);
+
         return new ReviewPage(content, p.getNumber(), p.getSize(), p.getTotalElements(), p.getTotalPages(), p.isLast(), avg);
     }
 
     private ReviewResponse toDto(Review r) {
-        return new ReviewResponse(r.getId(), r.getEventId(), r.getAuthorId(), r.getRating(), r.getComment(), r.getCreatedAt());
+        return new ReviewResponse(
+                r.getId(), r.getEventId(), r.getAuthorId(), r.getTargetId(),
+                r.getRating(), r.getComment(), r.getCreatedAt()
+        );
     }
 }

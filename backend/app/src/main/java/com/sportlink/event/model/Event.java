@@ -79,4 +79,10 @@ public class Event {
 
     @Column(name = "level_max")
     private Short levelMax;
+
+    @Column(name = "launched_at")
+    private OffsetDateTime launchedAt;
+
+    @Column(name = "launched_by", columnDefinition = "uuid")
+    private UUID launchedBy;
 }
