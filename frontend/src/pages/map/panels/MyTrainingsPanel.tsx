@@ -11,6 +11,8 @@ import { formatTimeLeft, humanizeStart, isEventPast } from "../lib/time";
 import { sportLabel } from "@/shared/lib/sport";
 import { StatusBadge } from "../ui/atoms/StatusBadge";
 
+import { eventLifecycleBadge } from "@/shared/lib/eventLifecycle"; 
+
 /* ===================== LEFT: Мои ближайшие тренировки ===================== */
 
 export function MyTrainingsPanel({
@@ -75,9 +77,8 @@ export function MyTrainingsPanel({
 
     try {
       setDeleting((m) => ({ ...m, [eventId]: true }));
-      // оптимистично уберём из «моих заявок»
-      useApplicationStore.getState().purgeByEvent(eventId);
       await http.delete(`/event/${eventId}`);
+      useApplicationStore.getState().purgeByEvent(eventId);
     } catch (e: any) {
       alert(e?.response?.data?.message || e?.message || "Не удалось удалить событие");
     } finally {
@@ -126,7 +127,16 @@ export function MyTrainingsPanel({
           const isOrganizer = meId && orgId && String(orgId).toLowerCase() === String(meId).toLowerCase();
           const canWithdraw =
             !isOrganizer && (a.status === "PENDING" || a.status === "CONFIRMED" || a.status === "WAITLISTED");
+          const nowMs = Date.now();
+          const startsAtTs = e.startsAt ? new Date(e.startsAt).getTime() : NaN;
+          const st = String(e.status || "").toUpperCase();
 
+          const canDeleteEvent =
+            isOrganizer &&
+            !e.launchedAt &&
+            Number.isFinite(startsAtTs) &&
+            nowMs < startsAtTs &&
+            ["DRAFT", "PUBLISHED", "CANCELLED"].includes(st);
           const canShowLocation = Boolean(onShowLocation && e.locationLat != null && e.locationLon != null);
 
           return (
@@ -213,9 +223,8 @@ export function MyTrainingsPanel({
                   <button
                     className="ml-auto rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
                     onClick={() => onDeleteEvent(e.id)}
-                    disabled={!!deleting[e.id]}
-                    title="Удалить событие"
-                  >
+                    disabled={!!deleting[e.id] || !canDeleteEvent}
+                    title={canDeleteEvent ? "Удалить событие" : "Удаление доступно только до начала и до запуска"}                  >
                     {deleting[e.id] ? "Удаление..." : "Удалить"}
                   </button>
                 ) : (

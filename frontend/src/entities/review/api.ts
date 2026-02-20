@@ -6,7 +6,7 @@ export async function createReview(payload: ReviewCreate) {
   return data;
 }
 
-export async function listReviewsByEvent(eventId: string, targetUserId: string, page = 0, size = 20): Promise<ReviewPage> {
-  const { data } = await http.get(`/review/by-event/${eventId}`, { params: { targetUserId, page, size } });
+export async function listReviewsByEvent(eventId: string, targetId: string, page = 0, size = 20): Promise<ReviewPage> {
+  const { data } = await http.get(`/review/by-event/${eventId}`, { params: { targetId, page, size } });
   return data;
 }

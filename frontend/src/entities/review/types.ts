@@ -2,7 +2,7 @@ export type Review = {
   id: string;
   eventId: string;
   authorId: string;
-  targetUserId: string;
+  targetId: string;
   rating: number;
   comment?: string | null;
   createdAt: string;
@@ -20,7 +20,7 @@ export type ReviewPage = {
 
 export type ReviewCreate = {
   eventId: string;
-  targetUserId: string;
+  targetId: string;
   rating: number;
   comment?: string | null;
 };

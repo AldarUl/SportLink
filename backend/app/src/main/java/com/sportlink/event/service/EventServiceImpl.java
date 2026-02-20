@@ -392,6 +392,10 @@ public class EventServiceImpl implements EventService {
             throw new IllegalStateException("EVENT_NOT_LAUNCHED");
         }
 
+        if (e.getStatus() != EventStatus.STARTED) {
+            throw new IllegalStateException("EVENT_NOT_STARTED");
+        }
+
         e.setStatus(com.sportlink.event.model.EventStatus.FINISHED);
         e = eventRepository.save(e);
         return toDto(e);

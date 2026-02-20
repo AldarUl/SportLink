@@ -2,7 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import type { Event } from "@/entities/event/types";
 import Badge from "./components/Badge";
-import { eventStatusRu } from "./components/status";
+import { eventLifecycleBadge } from "@/shared/lib/eventLifecycle";
 import EventMetaCard from "./components/EventMetaCard";
 import AfterTrainingSection from "./components/AfterTrainingSection";
 import { sportLabel } from "@/shared/lib/sport";
@@ -16,17 +16,20 @@ export default function EventDetailView({
   onCancel,
   onDelete,
   onLaunch,
+  onFinish,
 }: {
   ev: Event;
   isOrganizer: boolean;
   meId: string | null;
   statusColor: string;
-  acting: "cancel" | "delete" | "launch" | null;
+  acting: "cancel" | "delete" | "launch" | "finish" | null;
   onCancel: () => void;
   onDelete: () => void;
   onLaunch: () => void;
+  onFinish: () => void;
 }) {
   const kind = String((ev as any).kind || "EVENT").toUpperCase();
+  const lifecycle = eventLifecycleBadge(ev);
   const startsAtMs = Date.parse(ev.startsAt);
   const nowMs = Date.now();
   const launchOpenMs = startsAtMs - 5 * 60 * 1000;
@@ -54,7 +57,7 @@ export default function EventDetailView({
         <div>
           <h1 className="text-2xl font-semibold">{ev.title}</h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge className={statusColor}>{eventStatusRu(ev.status)}</Badge>
+            {lifecycle ? <Badge className={statusColor}>{lifecycle}</Badge> : null}
             <Badge className="bg-blue-100 text-blue-700">{(ev as any).kind}</Badge>
             <Badge className="bg-slate-100 text-slate-700">{sportLabel((ev as any).sport)}</Badge>
             <Badge className="bg-violet-100 text-violet-700">{(ev as any).admission}</Badge>
@@ -86,6 +89,17 @@ export default function EventDetailView({
                   title={launchTitle}
                 >
                   {acting === "launch" ? "Запуск…" : launchLabel}
+                </button>
+              )}
+
+              {ev.status === "STARTED" && (
+                <button
+                  disabled={acting === "finish"}
+                  onClick={onFinish}
+                  className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+                  title="Завершение откроет оценки и финальные отметки"
+                >
+                  {acting === "finish" ? "Завершение…" : (kind === "TRAINING" ? "Завершить тренировку" : "Завершить событие")}
                 </button>
               )}
 

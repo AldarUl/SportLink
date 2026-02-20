@@ -7,6 +7,9 @@ import { useAuthStore } from "@/features/auth/store";
 import { getApiErrorMessage } from "@/shared/lib/apiError";
 import EventDetailView from "./EventDetailView";
 
+
+
+
 export default function EventDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
@@ -14,7 +17,7 @@ export default function EventDetailPage() {
 
   const [ev, setEv] = useState<Event | null>(null);
   const [loading, setLoading] = useState(true);
-  const [acting, setActing] = useState<"cancel" | "delete" | "launch" | null>(null);
+  const [acting, setActing] = useState<"cancel" | "delete" | "launch" | "finish" | null>(null);
 
   const meId = useAuthStore((s: any) => s.user?.id || null);
 
@@ -113,16 +116,32 @@ export default function EventDetailPage() {
     }
   };
 
+  const handleFinish = async () => {
+    if (!confirm("Завершить тренировку/событие? После этого откроются оценки.")) return;
+    setActing("finish");
+    try {
+      const updated = await finishEvent(ev.id);
+      setEv(updated);
+      upsert(updated);
+      navigate(`/event/${ev.id}?manage=1#after`, { replace: true });
+    } catch (e) {
+      alert(getApiErrorMessage(e, "Не удалось завершить"));
+    } finally {
+      setActing(null);
+    }
+  };
+
   return (
-    <EventDetailView
-      ev={ev}
-      isOrganizer={isOrganizer}
-      meId={meId}
-      statusColor={statusColor}
-      acting={acting}
-      onCancel={handleCancel}
-      onDelete={handleDelete}
-      onLaunch={handleLaunch}
-    />
+<EventDetailView
+  ev={ev}
+  isOrganizer={isOrganizer}
+  meId={meId}
+  statusColor={statusColor}
+  acting={acting}
+  onCancel={handleCancel}
+  onDelete={handleDelete}
+  onLaunch={handleLaunch}
+  onFinish={handleFinish}
+/>
   );
 }

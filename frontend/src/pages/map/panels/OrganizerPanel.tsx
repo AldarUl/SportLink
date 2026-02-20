@@ -4,6 +4,7 @@ import type { Event as AppEvent } from "@/entities/event/types";
 import { useAuthStore } from "@/features/auth/store";
 import { applicationsByEvent, confirm as apiConfirm, decline as apiDecline } from "@/entities/application/api";
 import { sportLabel } from "@/shared/lib/sport";
+import { eventLifecycleBadge } from "@/shared/lib/eventLifecycle";
 
 import { UserInline } from "../ui/atoms/UserInline";
 
@@ -16,6 +17,8 @@ type AppRow = {
   status: "PENDING" | "CONFIRMED" | "DECLINED" | "WAITLISTED" | string;
 };
 
+const NOT_LAUNCHED_GRACE_MINUTES = 15;
+
 function endsAtMs(e: any) {
   const base = Date.parse(e?.launchedAt || e?.startsAt || "");
   const dur = Number(e?.durationMin ?? 60);
@@ -26,6 +29,16 @@ function endsAtMs(e: any) {
 function isPastEvent(e: any, nowMs: number) {
   const status = String(e?.status || "").toUpperCase();
   if (status === "CANCELLED" || status === "FINISHED") return true;
+
+  // Ручной старт: если не запущено, то после grace-окна считаем несостоявшимся
+  if (status === "PUBLISHED" && !e?.launchedAt && e?.startsAt) {
+    const start = Date.parse(e.startsAt);
+    if (Number.isFinite(start)) {
+      const graceEnd = start + NOT_LAUNCHED_GRACE_MINUTES * 60_000;
+      if (nowMs > graceEnd) return true;
+    }
+  }
+
   const end = endsAtMs(e);
   return Number.isFinite(end) ? nowMs > end : false;
 }
@@ -234,6 +247,7 @@ export function OrganizerPanel({
 
           // время/правила
           const status = String(e.status || "").toUpperCase();
+          const lifecycleLabel = eventLifecycleBadge(e);
           const now = Date.now();
           const startsAtTs = e.startsAt ? new Date(e.startsAt).getTime() : NaN;
           const regTs = e.registrationDeadline ? new Date(e.registrationDeadline).getTime() : NaN;
@@ -308,7 +322,7 @@ export function OrganizerPanel({
                   <div className="text-xs text-gray-500">
                     {(e.kind || "TRAINING").toString().toUpperCase() === "EVENT" ? "Событие" : "Тренировка"}
                     {e.sport ? ` · ${sportLabel(e.sport)}` : ""}
-                    {String(e.status || "").toUpperCase() === "PUBLISHED" ? "" : (e.status ? ` · ${String(e.status).toUpperCase()}` : "")}
+                    {lifecycleLabel ? ` · ${lifecycleLabel}` : ""}
                   </div>
 
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-600">

@@ -52,11 +52,19 @@ export function PopupCard({
 
   // Удаление (удобно пользователю): пока событие не запущено и время начала ещё не наступило.
   // Бэк дополнительно защитит от неверных состояний.
+  const st = String((e as any).status || "").toUpperCase();
+  const startsOk = Number.isFinite(startsAtMs);
+
   const canDelete =
     isOrganizer &&
-    !e.launchedAt &&
-    ["DRAFT", "PUBLISHED", "CANCELLED"].includes(String((e as any).status || "")) &&
-    nowMs < startsAtMs;
+    !e.launchedAt &&                      // не запущено вручную
+    startsOk &&
+    nowMs < startsAtMs &&                 // до начала по расписанию
+    ["DRAFT", "PUBLISHED", "CANCELLED"].includes(st);
+
+
+
+
 
   const launchTitle = tooEarly
     ? "Запуск доступен за 5 минут до начала"
@@ -64,11 +72,16 @@ export function PopupCard({
       ? "Окно запуска прошло (15 минут после начала)"
       : "Запуск доступен за 5 минут до начала и 15 минут после";
 
-  const deleteTitle = e.launchedAt
-    ? "Нельзя удалить после запуска"
-    : nowMs >= startsAtMs
-      ? "Нельзя удалить после начала"
-      : "Удалить событие (если оно ещё не началось)";
+  const deleteTitle = !isOrganizer
+    ? "Только организатор может удалить"
+    : e.launchedAt
+      ? "Нельзя удалить после запуска"
+      : !Number.isFinite(startsAtMs)
+        ? "Нельзя удалить: неизвестное время начала"
+        : nowMs >= startsAtMs
+          ? "Нельзя удалить после начала"
+          : "Удалить событие (доступно только до начала и до запуска)";
+
 
   const deleteLabel = kind === "TRAINING" ? "Удалить тренировку" : "Удалить событие";
 
@@ -130,8 +143,7 @@ export function PopupCard({
             ) : (
               <button
                 disabled={!canDelete || busy !== null}
-                className="h-10 rounded-xl bg-red-600 text-white disabled:opacity-60"
-                title={deleteTitle}
+                className="h-10 rounded-xl bg-red-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"                title={deleteTitle}
                 onClick={async () => {
                   const ok = confirm(`${deleteLabel}?`);
                   if (!ok) return;

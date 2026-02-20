@@ -49,8 +49,8 @@ public class EventLifecycleScheduler {
      * считаем, что оно не состоялось и переводим в CANCELLED.
      */
     private int cancelNotLaunchedPastGrace(OffsetDateTime now) {
-        final int GRACE_MINUTES = 15;
-        OffsetDateTime cutoff = now.minusMinutes(GRACE_MINUTES);
+        int grace = props.getNotLaunchedGraceMinutes();
+        OffsetDateTime cutoff = now.minusMinutes(grace);
 
         int total = 0;
         while (true) {
@@ -69,28 +69,44 @@ public class EventLifecycleScheduler {
 
     private int promoteToFinished(OffsetDateTime now) {
         int total = 0;
+
         while (true) {
             List<Event> batch = eventRepository.findTop1000ByStatusOrderByStartsAtAsc(EventStatus.STARTED);
             if (batch.isEmpty()) break;
 
-            List<Event> toSave = new ArrayList<>(batch.size());
+            List<Event> toSave = new ArrayList<>();
+            boolean canStop = false;
+
             for (Event e : batch) {
-                if (e.getDurationMin() == null) continue;
-                OffsetDateTime base = (e.getLaunchedAt() != null) ? e.getLaunchedAt() : e.getStartsAt();
-                if (base == null) continue;
-                OffsetDateTime end = base.plusMinutes(e.getDurationMin());
+                if (e.getLaunchedAt() == null || e.getDurationMin() == null) {
+                    // нечего считать — пропускаем, но не останавливаем весь цикл
+                    continue;
+                }
+
+                OffsetDateTime end = e.getLaunchedAt().plusMinutes(e.getDurationMin());
                 if (!end.isAfter(now)) {
                     e.setStatus(EventStatus.FINISHED);
                     toSave.add(e);
+                } else {
+                    // самый ранний "нормальный" STARTED ещё не закончился -> дальше тоже не закончатся
+                    canStop = true;
+                    break;
                 }
             }
+
             if (!toSave.isEmpty()) {
                 eventRepository.saveAll(toSave);
                 total += toSave.size();
-            } else {
-                break;
+                continue;
             }
+
+            // если нечего сохранять и мы уверены что рано — выходим
+            if (canStop) break;
+
+            // иначе тоже выходим, чтобы не крутиться бесконечно (например, все durationMin=null)
+            break;
         }
+
         return total;
     }
 

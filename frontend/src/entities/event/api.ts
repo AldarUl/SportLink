@@ -193,3 +193,8 @@ export async function listMyOrganizedEvents(options?: { futureOnly?: boolean; pa
   const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
   return (arr as any[]).map(toEvent);
 }
+
+export async function finishEvent(id: string) {
+  const { data } = await api.patch(`/api/v1/event/${id}/finish`);
+  return data;
+}

@@ -11,4 +11,7 @@ public class EventsProperties {
 
     /** Включить/выключить обработчик жизненного цикла */
     private boolean lifecycleEnabled = true;
+
+    /** Через сколько минут после startsAt отменять, если не запущено вручную */
+    private int notLaunchedGraceMinutes = 15;
 }

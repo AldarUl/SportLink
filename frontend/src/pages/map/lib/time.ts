@@ -1,3 +1,5 @@
+const NOT_LAUNCHED_GRACE_MINUTES = 15;
+
 export function formatTimeLeft(startIso: string | Date) {
   const startTs = new Date(startIso).getTime();
   const nowTs = Date.now();
@@ -37,6 +39,15 @@ export function isEventPast(e: any): boolean {
 
   if (!e?.startsAt) return false;
   const start = new Date(e.startsAt).getTime();
+
+  // Ручной старт: если время начала прошло, но запуск не был выполнен,
+  // то после grace-окна считаем событие несостоявшимся (будет CANCELLED планировщиком).
+  const launchedAt = e?.launchedAt ? new Date(e.launchedAt).getTime() : NaN;
+  if (!Number.isFinite(launchedAt) && status === "PUBLISHED") {
+    const graceEnd = start + NOT_LAUNCHED_GRACE_MINUTES * 60_000;
+    if (Date.now() > graceEnd) return true;
+  }
+
   const durMs = (e.durationMin ?? 60) * 60000;
   const end = start + durMs;
   return Date.now() > end;
