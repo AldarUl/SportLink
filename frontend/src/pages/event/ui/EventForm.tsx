@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import type { Event } from "@/entities/event/types";
+import { SPORTS_FALLBACK, normalizeSportCode } from "@/shared/lib/sport";
 
 export type EventFormValues = {
   title: string;
@@ -9,7 +10,7 @@ export type EventFormValues = {
   capacity?: number | null;
   waitlistEnabled: boolean;
   admission: "AUTO" | "MANUAL";
-  access: "PUBLIC" | "CLUB_ONLY";
+  access: "PUBLIC" | "PRIVATE";
   description?: string | null;
 };
 
@@ -43,13 +44,13 @@ export default function EventForm({
 }) {
   const initVals: EventFormValues = useMemo(() => ({
     title: initial.title || "",
-    sport: initial.sport || "",
+    sport: normalizeSportCode(initial.sport || ""),
     startsAtISO: initial.startsAt,
     durationMin: initial.durationMin || 60,
     capacity: initial.capacity ?? null,
     waitlistEnabled: Boolean(initial.waitlistEnabled),
     admission: (initial.admission as any) || "MANUAL",
-    access: (initial.access as any) || "PUBLIC",
+    access: ((String(initial.access || "PUBLIC").toUpperCase() === "PUBLIC") ? "PUBLIC" : "PRIVATE") as any,
     description: initial.description ?? "",
   }), [initial]);
 
@@ -78,12 +79,16 @@ export default function EventForm({
 
         <label className="text-sm">
           <div className="text-gray-600 mb-1">Вид спорта</div>
-          <input
+          <select
             className="w-full rounded-md border px-3 py-2"
             value={vals.sport}
             onChange={(e) => onChange("sport", e.target.value)}
             required
-          />
+          >
+            {SPORTS_FALLBACK.map((s) => (
+              <option key={s.code} value={s.code}>{s.name}</option>
+            ))}
+          </select>
         </label>
 
         <label className="text-sm">
@@ -153,7 +158,7 @@ export default function EventForm({
             onChange={(e) => onChange("access", e.target.value as any)}
           >
             <option value="PUBLIC">PUBLIC</option>
-            <option value="CLUB_ONLY">CLUB_ONLY</option>
+            <option value="PRIVATE">PRIVATE</option>
           </select>
         </label>
       </div>

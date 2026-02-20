@@ -38,4 +38,7 @@ public interface EventService {
     EventPage my(UUID organizerId, boolean futureOnly, int page, int size);
 
     EventResponse launch(UUID id, UUID currentUserId);
+
+    // Manual finish endpoint (used by UI)
+    EventResponse finish(UUID id, UUID currentUserId);
 }

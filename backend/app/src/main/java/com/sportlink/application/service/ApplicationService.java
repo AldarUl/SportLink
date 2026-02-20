@@ -15,5 +15,9 @@ public interface ApplicationService {
     ApplicationPage listByEvent(UUID eventId, int page, int size, UUID organizerId); // заявки конкретного события (только организатор)
     ApplicationPage listMy(UUID userId, int page, int size);                           // мои заявки
 
+    // Legacy: формат для фронта — список моих заявок с вложенным событием
+    java.util.List<com.sportlink.application.dto.ApplicationWithEventResponse> listMine(UUID userId);
+
+
     void withdraw(UUID applicationId, UUID userId);            // пользователь отзывает свою заявку
 }

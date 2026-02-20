@@ -4,6 +4,7 @@ import type { Application, Page } from "./types";
 import { apply as apiApply, withdraw as apiWithdraw, myApplications } from "./api";
 import { http } from "@/api/http";
 import type { Event } from "@/entities/event/types";
+import { normalizeSportCode } from "@/shared/lib/sport";
 import { useEventStore } from "@/entities/event/store";
 
 
@@ -15,7 +16,7 @@ function normEvent(e: any): Event {
     id: String(e.id).toLowerCase(),
     kind: e.kind ?? "TRAINING",
     title: e.title,
-    sport: e.sport,
+    sport: normalizeSportCode(e.sport),
     description: e.description ?? null,
     startsAt: e.startsAt ?? e.startAt,
     durationMin: e.durationMin ?? e.duration ?? 60,
@@ -26,7 +27,6 @@ function normEvent(e: any): Event {
     recurrenceRule: e.recurrenceRule ?? null,
     registrationDeadline: e.registrationDeadline ?? null,
     organizerId: e.organizerId ? String(e.organizerId).toLowerCase() : "",
-    clubId: e.clubId ?? null,
     status: e.status ?? "PUBLISHED",
     locationLat: e.locationLat ?? e.lat ?? e.location?.lat ?? null,
     locationLon: e.locationLon ?? e.lon ?? e.location?.lon ?? null,

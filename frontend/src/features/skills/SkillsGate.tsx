@@ -41,8 +41,19 @@ export default function SkillsGate() {
         setError(null);
       } catch (e: any) {
         if (!alive) return;
-        setError(e?.message || "Не удалось загрузить навыки");
-        setOpen(true);                 // дадим шанс попробовать ещё раз
+
+        // 401/403 обычно означает, что токен протух / не принят.
+        // Интерцептор в src/api/http.ts сам попробует refresh и при неуспехе сделает редирект на /auth/login.
+        const status = e?.response?.status;
+        if (status === 401 || status === 403) {
+          setError(null);
+          setOpen(false);
+          return;
+        }
+
+        setError(e?.response?.data?.message || e?.message || "Не удалось загрузить навыки");
+        // не открываем модалку принудительно при сетевой ошибке — пользователь сможет продолжить и повторить позже
+        setOpen(false);
       } finally {
         if (alive) setBusy(false);
       }

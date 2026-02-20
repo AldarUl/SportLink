@@ -67,4 +67,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiError.of("Invalid or expired token", "UNAUTHORIZED", req.getDescription(false)));
     }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiError> unauthorized(UnauthorizedException ex,
+                                                 org.springframework.web.context.request.WebRequest req) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiError.of(ex.getMessage(), "UNAUTHORIZED", req.getDescription(false)));
+    }
 }

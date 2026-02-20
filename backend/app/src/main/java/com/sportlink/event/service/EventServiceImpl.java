@@ -82,6 +82,19 @@ public class EventServiceImpl implements EventService {
 
 
 
+    private static String normalizeSport(String sport) {
+        if (sport == null) return null;
+        String s = sport.trim();
+        return s.isEmpty() ? null : s.toUpperCase();
+    }
+
+    private static EventAccess normalizeAccess(EventAccess access) {
+        if (access == null) return EventAccess.PUBLIC;
+        // CLUB_ONLY is deprecated in the UI (clubs are removed). Treat as PRIVATE for compatibility.
+        if (access == EventAccess.CLUB_ONLY) return EventAccess.PRIVATE;
+        return access;
+    }
+
     @Override
     public EventResponse create(EventCreateRequest r, UUID organizerId) {
         if (r.kind() == EventKind.TRAINING && r.admission() != EventAdmission.MANUAL)
@@ -89,11 +102,6 @@ public class EventServiceImpl implements EventService {
         if (r.kind() == EventKind.TRAINING && r.capacity() != null && r.capacity() > 50)
             throw new IllegalArgumentException("TRAINING capacity must be ≤ 50");
 
-        if (r.access() == EventAccess.CLUB_ONLY) {
-            if (r.clubId() == null) throw new IllegalArgumentException("clubId is required for CLUB_ONLY events");
-            boolean isMember = clubMemberRepository.existsByClubIdAndUserId(r.clubId(), organizerId);
-            if (!isMember) throw new IllegalArgumentException("Organizer must be a club member");
-        }
 
         if (r.startsAt() == null || r.startsAt().isBefore(OffsetDateTime.now()))
             throw new IllegalArgumentException("startsAt must be in the future");
@@ -111,18 +119,18 @@ public class EventServiceImpl implements EventService {
         Event e = Event.builder()
                 .kind(r.kind())
                 .title(r.title())
-                .sport(r.sport())
+                .sport(normalizeSport(r.sport()))
                 .description(r.description())
                 .startsAt(r.startsAt())
                 .durationMin(r.durationMin())
                 .capacity(r.capacity())
                 .waitlistEnabled(r.waitlistEnabled())
-                .access(r.access())
+                .access(normalizeAccess(r.access()))
                 .admission(r.admission())
                 .recurrenceRule(r.recurrenceRule())
                 .registrationDeadline(r.registrationDeadline())
                 .organizerId(organizerId)
-                .clubId(r.clubId())
+                .clubId(null)
                 .locationLat(r.locationLat())
                 .locationLon(r.locationLon())
                 .levelMin(r.levelMin())
@@ -154,12 +162,6 @@ public class EventServiceImpl implements EventService {
     @Transactional(readOnly = true)
     public EventResponse get(UUID id, UUID viewerId) {
         Event e = eventRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("Event not found"));
-        if (e.getAccess() == EventAccess.CLUB_ONLY) {
-            if (viewerId == null || (!e.getOrganizerId().equals(viewerId)
-                    && (e.getClubId() == null || !clubMemberRepository.existsByClubIdAndUserId(e.getClubId(), viewerId)))) {
-                throw new org.springframework.security.access.AccessDeniedException("Club members only");
-            }
-        }
         return toDto(e);
     }
 
@@ -200,7 +202,7 @@ public class EventServiceImpl implements EventService {
         requireNotStarted(e);
 
         if (u.title() != null) e.setTitle(u.title());
-        if (u.sport() != null) e.setSport(u.sport());
+        if (u.sport() != null) e.setSport(normalizeSport(u.sport()));
         if (u.description() != null) e.setDescription(u.description());
         if (u.startsAt() != null) e.setStartsAt(u.startsAt());
         if (u.startsAt() != null && u.startsAt().isBefore(OffsetDateTime.now()))
@@ -223,7 +225,7 @@ public class EventServiceImpl implements EventService {
         }
 
         if (u.waitlistEnabled() != null) e.setWaitlistEnabled(u.waitlistEnabled());
-        if (u.access() != null) e.setAccess(u.access());
+        if (u.access() != null) e.setAccess(normalizeAccess(u.access()));
         if (u.admission() != null) {
             if (e.getKind() == EventKind.TRAINING && u.admission() != EventAdmission.MANUAL)
                 throw new IllegalArgumentException("TRAINING must use MANUAL admission");
@@ -234,11 +236,6 @@ public class EventServiceImpl implements EventService {
         if (u.locationLat() != null) e.setLocationLat(u.locationLat());
         if (u.locationLon() != null) e.setLocationLon(u.locationLon());
 
-        if (u.access() != null && u.access() == EventAccess.CLUB_ONLY) {
-            if (e.getClubId() == null) throw new IllegalArgumentException("clubId is required for CLUB_ONLY events");
-            boolean isMember = clubMemberRepository.existsByClubIdAndUserId(e.getClubId(), currentUserId);
-            if (!isMember) throw new IllegalArgumentException("Organizer must be a club member");
-        }
         if (u.levelMin() != null || u.levelMax() != null) {
             Short newMin = (u.levelMin() != null) ? u.levelMin() : e.getLevelMin();
             Short newMax = (u.levelMax() != null) ? u.levelMax() : e.getLevelMax();
@@ -291,8 +288,10 @@ public class EventServiceImpl implements EventService {
             throw new IllegalArgumentException("Only organizer can modify the event");
     }
     private void requireNotStarted(Event e) {
-        if (e.getStartsAt() != null && e.getStartsAt().isBefore(OffsetDateTime.now()))
-            throw new IllegalStateException("Event already started");
+        // Ручной старт: "началось" только после нажатия запуска
+        if (e.getLaunchedAt() != null || e.getStatus() == EventStatus.STARTED || e.getStatus() == EventStatus.FINISHED) {
+            throw new IllegalStateException("Event already launched");
+        }
     }
 
     private EventResponse toDto(Event e) {
@@ -306,8 +305,10 @@ public class EventServiceImpl implements EventService {
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found"));
         requireOrganizer(e, currentUserId);
 
-        // запретить удаление начавшихся событий
-        // requireNotStarted(e);
+        // Безопасно: не даём удалить уже запущенное/завершённое событие.
+        if (e.getLaunchedAt() != null || e.getStatus() == EventStatus.STARTED || e.getStatus() == EventStatus.FINISHED) {
+            throw new IllegalStateException("CANNOT_DELETE_LAUNCHED_EVENT");
+        }
 
         eventRepository.deleteById(id);
     }
@@ -340,25 +341,59 @@ public class EventServiceImpl implements EventService {
 
         requireOrganizer(e, currentUserId);
 
+        // Уже запущено — идемпотентно
+        if (e.getLaunchedAt() != null) {
+            return toDto(e);
+        }
+
+        if (e.getStatus() == EventStatus.CANCELLED || e.getStatus() == EventStatus.FINISHED) {
+            throw new IllegalStateException("EVENT_BAD_STATUS");
+        }
+
         OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime starts = e.getStartsAt();
-        OffsetDateTime ends = e.getStartsAt().plusMinutes(e.getDurationMin().longValue());
-
-        // запускать можно только “во время” события
-        if (now.isBefore(starts)) {
-            throw new IllegalStateException("EVENT_NOT_STARTED_YET");
-        }
-        if (now.isAfter(ends)) {
-            throw new IllegalStateException("EVENT_ALREADY_FINISHED");
+        OffsetDateTime startsAt = e.getStartsAt();
+        if (startsAt == null) {
+            throw new IllegalStateException("EVENT_STARTS_AT_REQUIRED");
         }
 
-        // idempotent
+        // окно запуска: [startsAt - 5 мин, startsAt + 15 мин]
+        OffsetDateTime open  = startsAt.minusMinutes(5);
+        OffsetDateTime close = startsAt.plusMinutes(15);
+
+        if (now.isBefore(open)) {
+            throw new IllegalStateException("EVENT_LAUNCH_TOO_EARLY");
+        }
+        if (now.isAfter(close)) {
+            throw new IllegalStateException("EVENT_LAUNCH_TOO_LATE");
+        }
+
+        e.setLaunchedAt(now);
+        e.setLaunchedBy(currentUserId);
+        e.setStatus(EventStatus.STARTED);
+        e = eventRepository.save(e);
+
+        return toDto(e);
+    }
+
+    @Override
+    public com.sportlink.event.dto.EventResponse finish(java.util.UUID id, java.util.UUID currentUserId) {
+        com.sportlink.event.model.Event e = eventRepository.findById(id)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Event not found"));
+
+        requireOrganizer(e, currentUserId);
+
+        if (e.getStatus() == com.sportlink.event.model.EventStatus.CANCELLED) {
+            throw new IllegalStateException("EVENT_BAD_STATUS");
+        }
+        if (e.getStatus() == com.sportlink.event.model.EventStatus.FINISHED) {
+            return toDto(e);
+        }
         if (e.getLaunchedAt() == null) {
-            e.setLaunchedAt(now);
-            e.setLaunchedBy(currentUserId);
-            e = eventRepository.save(e);
+            throw new IllegalStateException("EVENT_NOT_LAUNCHED");
         }
 
+        e.setStatus(com.sportlink.event.model.EventStatus.FINISHED);
+        e = eventRepository.save(e);
         return toDto(e);
     }
 }

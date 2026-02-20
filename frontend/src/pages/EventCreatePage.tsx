@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listSports } from "@/entities/sport/api";
 import { createEvent } from "@/entities/event/api";
+import { normalizeSportCode } from "@/shared/lib/sport";
 import type { Event } from "@/entities/event/types";
 import { useAuthStore } from "@/features/auth/store";
 
@@ -17,14 +18,13 @@ type Form = {
   waitlistEnabled?: boolean;
   access: Event["access"];
   admission: Event["admission"];
-  clubId?: string;
   locationLat?: number;
   locationLon?: number;
   registrationDeadline?: string;
 };
 
 const KINDS: Event["kind"][] = ["TRAINING", "EVENT"];
-const ACCESS: Event["access"][] = ["PUBLIC", "CLUB_ONLY"];
+const ACCESS: Event["access"][] = ["PUBLIC", "PRIVATE"];
 const ADMISSION: Event["admission"][] = ["AUTO", "MANUAL"];
 
 export default function EventCreatePage() {
@@ -81,7 +81,7 @@ export default function EventCreatePage() {
       const payload = {
         kind: f.kind,
         title: f.title.trim(),
-        sport: f.sport,
+        sport: normalizeSportCode(f.sport),
         startsAt: f.startsAt, // ISO string
         access: f.access,
         admission: f.admission,
@@ -92,7 +92,6 @@ export default function EventCreatePage() {
         waitlistEnabled: f.waitlistEnabled,
         recurrenceRule: undefined,
         registrationDeadline: f.registrationDeadline,
-        clubId: f.clubId,
         locationLat: f.locationLat,
         locationLon: f.locationLon,
       };

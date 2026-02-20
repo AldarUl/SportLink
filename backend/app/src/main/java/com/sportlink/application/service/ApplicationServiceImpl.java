@@ -2,13 +2,17 @@ package com.sportlink.application.service;
 
 import com.sportlink.application.dto.ApplicationPage;
 import com.sportlink.application.dto.ApplicationResponse;
+import com.sportlink.application.dto.ApplicationWithEventResponse;
+import com.sportlink.application.dto.EventShortResponse;
 import com.sportlink.application.model.Application;
 import com.sportlink.application.model.ApplicationStatus;
 import com.sportlink.application.repository.ApplicationRepository;
 import com.sportlink.event.model.Event;
 import com.sportlink.event.model.EventAccess;
 import com.sportlink.event.model.EventAdmission;
+import com.sportlink.event.model.EventStatus;
 import com.sportlink.event.repository.EventRepository;
+import com.sportlink.event.mapper.EventMapper;
 import com.sportlink.notification.service.NotificationService;
 import com.sportlink.user.repository.UserSportSkillRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -19,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +33,7 @@ public class ApplicationServiceImpl implements ApplicationService {
 
     private final ApplicationRepository appRepo;
     private final EventRepository eventRepo;
+    private final EventMapper eventMapper;
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
     private final NotificationService notificationService;
     private final UserSportSkillRepository userSportSkillRepository;
@@ -214,6 +221,60 @@ public class ApplicationServiceImpl implements ApplicationService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ApplicationWithEventResponse> listMine(UUID userId) {
+        var apps = appRepo.findByUserId(userId);
+        if (apps == null || apps.isEmpty()) return List.of();
+
+        var eventIds = apps.stream()
+                .map(Application::getEventId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        var events = eventRepo.findAllById(eventIds);
+        Map<UUID, Event> byId = events.stream()
+                .collect(Collectors.toMap(Event::getId, e -> e));
+
+        return apps.stream()
+                .map(a -> {
+                    Event e = byId.get(a.getEventId());
+                    if (e == null) return null;
+
+                    var er = eventMapper.toResponse(e);
+
+                    var shortEv = new EventShortResponse(
+                            er.id(),
+                            er.kind(),
+                            er.title(),
+                            er.sport(),
+                            er.startsAt(),
+                            er.durationMin(),
+                            er.status(),
+                            er.launchedAt(),
+                            er.access(),
+                            er.admission(),
+                            er.capacity(),
+                            er.locationLat(),
+                            er.locationLon()
+                    );
+
+                    return new ApplicationWithEventResponse(
+                            a.getId(),
+                            a.getEventId(),
+                            a.getUserId(),
+                            a.getStatus(),
+                            a.getCreatedAt(),
+                            shortEv
+                    );
+                })
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing((ApplicationWithEventResponse r) -> r.event().startsAt(),
+                        Comparator.nullsLast(Comparator.naturalOrder())))
+                .toList();
+    }
+
+    @Override
     @Transactional
     public void withdraw(UUID applicationId, UUID userId) {
         Application a = appRepo.findById(applicationId)
@@ -275,14 +336,23 @@ public class ApplicationServiceImpl implements ApplicationService {
         var confirmed = appRepo.findByUserIdAndStatus(userId, ApplicationStatus.CONFIRMED);
         if (confirmed.isEmpty()) return false;
 
+        if (target.getStartsAt() == null || target.getDurationMin() == null) return false;
         var targetStart = target.getStartsAt();
-        var targetEnd   = target.getStartsAt().plusMinutes(target.getDurationMin());
+        var targetEnd   = targetStart.plusMinutes(target.getDurationMin());
 
         for (var a : confirmed) {
+            if (target.getId() != null && a.getEventId() != null && a.getEventId().equals(target.getId())) continue;
+
             var other = eventRepo.findById(a.getEventId()).orElse(null);
             if (other == null) continue;
+
+            // Cancelled/finished events must not block joining another event
+            if (other.getStatus() == EventStatus.CANCELLED || other.getStatus() == EventStatus.FINISHED) continue;
+
+            if (other.getStartsAt() == null || other.getDurationMin() == null) continue;
             var otherStart = other.getStartsAt();
-            var otherEnd   = other.getStartsAt().plusMinutes(other.getDurationMin());
+            var otherEnd   = otherStart.plusMinutes(other.getDurationMin());
+
             boolean overlap = !targetEnd.isBefore(otherStart) && !otherEnd.isBefore(targetStart);
             if (overlap) return true;
         }

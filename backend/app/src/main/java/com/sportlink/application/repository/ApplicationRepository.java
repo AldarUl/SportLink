@@ -12,6 +12,10 @@ import java.util.UUID;
 
 public interface ApplicationRepository extends JpaRepository<Application, UUID> {
 
+    /** Legacy: список заявок пользователя без пагинации (используется фронтом) */
+    List<Application> findByUserId(UUID userId);
+
+
     long countByEventIdAndStatus(UUID eventId, ApplicationStatus status);
 
     Page<Application> findByEventId(UUID eventId, Pageable pageable);

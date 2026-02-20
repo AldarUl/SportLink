@@ -32,7 +32,7 @@ public class EventMapper {
                 e.getClubId(),
                 e.getLocationLat(),
                 e.getLocationLon(),
-                resolveLiveStatus(e, OffsetDateTime.now()), // status
+                resolveLiveStatus(e, OffsetDateTime.now()), // status (ручной старт)
                 e.getLevelMin(),                            // NEW
                 e.getLevelMax(),                             // NEW
                 e.getLaunchedAt(),
@@ -56,18 +56,27 @@ public class EventMapper {
         );
     }
 
-    /** “Живой” статус без изменения схемы БД: CANCELLED хранится как есть, остальное считаем по времени. */
+    /**
+     * “Живой” статус для UI.
+     * Требование: событие НЕ должно автоматически становиться STARTED по startsAt.
+     * STARTED возможен только после ручного запуска (launchedAt != null).
+     */
     private EventStatus resolveLiveStatus(Event e, OffsetDateTime now) {
         if (e.getStatus() == EventStatus.CANCELLED) return EventStatus.CANCELLED;
 
-        var startsAt = e.getStartsAt();
-        var dur = e.getDurationMin();
-        if (startsAt == null || dur == null) {
-            return e.getStatus();
+        // Если не запускали вручную — событие остаётся PUBLISHED (даже если startsAt уже прошёл).
+        if (e.getLaunchedAt() == null) {
+            // DRAFT сейчас в БД почти не используется, но оставим на всякий случай.
+            if (e.getStatus() == EventStatus.DRAFT) return EventStatus.DRAFT;
+            return EventStatus.PUBLISHED;
         }
-        var endsAt = startsAt.plusMinutes(dur.longValue());
-        if (now.isBefore(startsAt)) return EventStatus.PUBLISHED;
-        if (now.isBefore(endsAt))   return EventStatus.STARTED;
+
+        // После ручного запуска STARTED/FINISHED считаем по launchedAt + durationMin.
+        var dur = e.getDurationMin();
+        if (dur == null) return EventStatus.STARTED;
+
+        var endsAt = e.getLaunchedAt().plusMinutes(dur.longValue());
+        if (now.isBefore(endsAt)) return EventStatus.STARTED;
         return EventStatus.FINISHED;
     }
 }

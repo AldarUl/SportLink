@@ -72,6 +72,23 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     @Transactional(readOnly = true)
+    public AttendanceResponse getMe(UUID eventId, UUID requesterId) {
+        var e = eventRepo.findById(eventId).orElseThrow(() -> new EntityNotFoundException("Event not found"));
+
+        // должен быть confirmed участником (или организатором)
+        if (!e.getOrganizerId().equals(requesterId)) {
+            boolean confirmed = appRepo.existsByEventIdAndUserIdAndStatus(eventId, requesterId, ApplicationStatus.CONFIRMED);
+            if (!confirmed) throw new org.springframework.security.access.AccessDeniedException("Only confirmed participants can view their attendance");
+        }
+
+        Attendance a = attendanceRepo.findByEventIdAndUserId(eventId, requesterId)
+                .orElseThrow(() -> new EntityNotFoundException("Attendance not found"));
+
+        return toDto(a);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<AttendanceResponse> list(UUID eventId, UUID requesterId) {
         var e = eventRepo.findById(eventId).orElseThrow(() -> new EntityNotFoundException("Event not found"));
         if (!e.getOrganizerId().equals(requesterId)) {

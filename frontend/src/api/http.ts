@@ -19,7 +19,12 @@ function getAccessToken(): string | null {
   }
 }
 function setAccessToken(token: string | null) {
-  useAuthStore.getState().setTokens({ accessToken: token, refreshToken: null });
+  // не затираем refreshToken, если он вдруг используется (часто refresh хранится в HttpOnly cookie)
+  const s: any = useAuthStore.getState();
+  useAuthStore.getState().setTokens({
+    accessToken: token,
+    refreshToken: s?.refreshToken ?? null,
+  });
 }
 
 /* ------- axios instance ------- */
@@ -28,6 +33,49 @@ export const http = axios.create({
   headers: { "Content-Type": "application/json" },
   withCredentials: true, // чтобы refresh-cookie ходила на /auth/refresh
 });
+
+/* ------- single-flight refresh + safe redirect ------- */
+let refreshPromise: Promise<string> | null = null;
+let redirecting = false;
+
+function logoutAndRedirect() {
+  if (redirecting) return;
+  redirecting = true;
+  try {
+    useAuthStore.getState().logout();
+  } catch {
+    /* no-op */
+  }
+  // Не делаем полный reload, если мы и так на страницах /auth/* — иначе выглядит как "мигает/обновляется".
+  if (typeof window !== "undefined") {
+    const p = window.location.pathname || "";
+    if (!p.startsWith("/auth")) {
+      // replace — чтобы нельзя было нажать Back и вернуться в «битую» сессию
+      window.location.replace("/auth/login");
+    }
+  }
+}
+
+async function refreshAccessToken(): Promise<string> {
+  // ВАЖНО: refresh делаем через "чистый" axios, чтобы request-интерсептор не добавлял протухший Bearer
+  const rt = (useAuthStore.getState() as any)?.refreshToken;
+  const body = rt ? { refreshToken: rt } : {};
+  const { data } = await axios.post(`${API_URL}/auth/refresh`, body, { withCredentials: true });
+  const newToken: string | undefined = data?.accessToken ?? data?.token;
+  if (!newToken) throw new Error("No access token in refresh response");
+  setAccessToken(newToken);
+  return newToken;
+}
+
+async function getFreshToken(): Promise<string> {
+  const p = refreshPromise ?? (refreshPromise = refreshAccessToken());
+  try {
+    return await p;
+  } finally {
+    // очищаем только если это тот же promise
+    if (refreshPromise === p) refreshPromise = null;
+  }
+}
 
 /* ------- request: подставляем Bearer ------- */
 http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
@@ -70,70 +118,47 @@ http.interceptors.response.use(
     const res = error.response;
     const original: any = error.config as AxiosRequestConfig & { _retry?: boolean };
 
+    const status = res?.status;
+
     const isAuthCall =
       original?.url?.includes("/auth/login") ||
-      original?.url?.includes("/auth/refresh");
+      original?.url?.includes("/auth/refresh") ||
+      original?.url?.includes("/auth/me");
 
-    const shouldRetryWithRefresh =
-      (res?.status === 401 || res?.status === 403) && !isAuthCall && !original?._retry;
+    const shouldTryRefresh =
+      (status === 401 || status === 403) && !isAuthCall && !original?._retry;
 
-    // общий флажок/очередь
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let isRefreshing = (globalThis as any).__SL_REFRESHING__ || false;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let waiters: Array<(t: string | null) => void> = (globalThis as any).__SL_REFRESH_WAITERS__ || [];
-
-    async function callRefresh(): Promise<string> {
-      const { data } = await axios.post(`${API_URL}/auth/refresh`, {}, { withCredentials: true });
-      const newToken: string = data?.accessToken ?? data?.token;
-      setAccessToken(newToken);
-      return newToken;
-    }
-
-    if (shouldRetryWithRefresh) {
-      if (isRefreshing) {
-        return new Promise((resolve) => {
-          waiters.push((t) => {
-            if (t) {
-              original.headers = { ...(original.headers || {}), Authorization: `Bearer ${t}` };
-              original._retry = true;
-              resolve(http(original));
-            } else {
-              resolve(Promise.reject(error));
-            }
-          });
-          (globalThis as any).__SL_REFRESH_WAITERS__ = waiters;
-        });
-      }
-
+    if (shouldTryRefresh) {
+      original._retry = true;
       try {
-        (globalThis as any).__SL_REFRESHING__ = true;
-        const newToken = await callRefresh();
-        waiters.forEach((cb) => cb(newToken));
-        waiters = [];
-        (globalThis as any).__SL_REFRESH_WAITERS__ = waiters;
-
+        const newToken = await getFreshToken();
         original.headers = { ...(original.headers || {}), Authorization: `Bearer ${newToken}` };
-        original._retry = true;
         return http(original);
-      } catch (e) {
-        waiters.forEach((cb) => cb(null));
-        waiters = [];
-        (globalThis as any).__SL_REFRESH_WAITERS__ = waiters;
-
-        useAuthStore.getState().logout();
-        if (typeof window !== "undefined") {
-          window.location.href = "/auth/login";
-        }
-        return Promise.reject(e);
-      } finally {
-        (globalThis as any).__SL_REFRESHING__ = false;
+      } catch {
+        // refresh не удался → выходим и редиректим, не отдавая ошибку в компоненты
+        logoutAndRedirect();
+        return new Promise(() => {});
       }
     }
 
-    if (res?.status === 401) {
-      useAuthStore.getState().logout();
+    // Если уже пытались refresh и снова прилетело 401/403 — считаем, что сессия невалидна.
+    // В нашем приложении почти все приватные эндпоинты должны быть доступны обычному пользователю,
+    // поэтому 403 после refresh обычно означает «токен не принят/не та роль».
+    if ((status === 401 || status === 403) && !isAuthCall && original?._retry) {
+      logoutAndRedirect();
+      return new Promise(() => {});
     }
+
+    // 401 без retry считаем разлогином ТОЛЬКО если у нас была сессия (есть access token).
+    // Иначе это может быть просто 401 на приватный эндпоинт при открытии сайта "с нуля".
+    if (status === 401) {
+      if (getAccessToken()) {
+        logoutAndRedirect();
+        return new Promise(() => {});
+      }
+      return Promise.reject(error);
+    }
+
     return Promise.reject(error);
   }
 );

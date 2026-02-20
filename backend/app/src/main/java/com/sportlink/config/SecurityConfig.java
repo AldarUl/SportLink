@@ -78,6 +78,8 @@ public class SecurityConfig {
                     ).permitAll();
                     auth.requestMatchers("/api/v1/auth/me").authenticated();
 
+                    // /error нужен, чтобы 404/ошибки не превращались в 403 из-за Security
+                    auth.requestMatchers("/error", "/error/**").permitAll();
 
 
                     auth.requestMatchers(HttpMethod.POST, "/api/v1/user").permitAll();

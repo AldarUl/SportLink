@@ -129,4 +129,28 @@ public class EventController {
     public EventResponse launch(@PathVariable UUID id, Authentication auth) {
         return eventService.launch(id, currentUserId(auth));
     }
+
+    /** Legacy фронт: PATCH вместо POST для cancel */
+    @io.swagger.v3.oas.annotations.Operation(summary = "Отменить событие (legacy PATCH)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PatchMapping("/{id}/cancel")
+    public void cancelPatch(@PathVariable UUID id, Authentication auth) {
+        eventService.cancel(id, currentUserId(auth));
+    }
+
+    /** Legacy фронт: PATCH вместо POST для launch */
+    @io.swagger.v3.oas.annotations.Operation(summary = "Запустить событие (legacy PATCH)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PatchMapping("/{id}/launch")
+    public EventResponse launchPatch(@PathVariable UUID id, Authentication auth) {
+        return eventService.launch(id, currentUserId(auth));
+    }
+
+    /** Завершить событие вручную (организатор) */
+    @io.swagger.v3.oas.annotations.Operation(summary = "Завершить событие (организатор)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PatchMapping("/{id}/finish")
+    public EventResponse finish(@PathVariable UUID id, Authentication auth) {
+        return eventService.finish(id, currentUserId(auth));
+    }
 }

@@ -2,6 +2,7 @@ import React from "react";
 import type { Event as AppEvent } from "@/entities/event/types";
 import type { LngLat } from "../../lib/geo";
 import { formatDateTime } from "../../lib/fmt";
+import { sportLabel } from "@/shared/lib/sport";
 import { PopupCard } from "../PopupCard";
 import ApplyWithdrawButton from "../balloons/ApplyWithdrawButton";
 
@@ -37,7 +38,7 @@ export function TrainingMarker({
   onClose: () => void;
 }) {
   const title = e.title;
-  const subtitle = `Тренировка • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
+  const subtitle = `Тренировка • ${sportLabel(e.sport) ?? ""} • ${formatDateTime(e.startsAt)}`;
   const PIN = 34, TAIL = 9, HALO = 0;
 
   const wrapStyle: React.CSSProperties = {
@@ -88,9 +89,6 @@ export function TrainingMarker({
               e={e}
               myPos={myPos ?? null}
               coords={coords}
-              hasApp={hasApp}
-              onApply={onApply}
-              onWithdraw={onWithdraw}
               onClose={onClose}
               onMore={onMore}
             />

@@ -32,26 +32,34 @@ public class EventLifecycleScheduler {
 
         OffsetDateTime now = OffsetDateTime.now();
 
-        int started  = promoteToStarted(now);
+        // ВАЖНО: STARTED ставится ТОЛЬКО вручную (через кнопку запуска).
+        // Поэтому тут мы не делаем promoteToStarted.
+        int expired  = cancelNotLaunchedPastGrace(now);
         int finished = promoteToFinished(now);
         int cleaned  = cleanupFinishedOlderThanDays(props.getRetentionDays(), now);
 
-        if (started + finished + cleaned > 0) {
-            log.info("lifecycle: started={}, finished={}, cleaned={} (retentionDays={})",
-                    started, finished, cleaned, props.getRetentionDays());
+        if (expired + finished + cleaned > 0) {
+            log.info("lifecycle: expiredNotLaunched={}, finished={}, cleaned={} (retentionDays={})",
+                    expired, finished, cleaned, props.getRetentionDays());
         }
     }
 
-    private int promoteToStarted(OffsetDateTime now) {
+    /**
+     * Если событие не запустили вручную в течение 15 минут после startsAt —
+     * считаем, что оно не состоялось и переводим в CANCELLED.
+     */
+    private int cancelNotLaunchedPastGrace(OffsetDateTime now) {
+        final int GRACE_MINUTES = 15;
+        OffsetDateTime cutoff = now.minusMinutes(GRACE_MINUTES);
+
         int total = 0;
         while (true) {
             List<Event> batch = eventRepository
-                    .findTop1000ByStatusAndStartsAtLessThanEqual(EventStatus.PUBLISHED, now);
+                    .findTop1000ByStatusAndStartsAtBeforeAndLaunchedAtIsNull(EventStatus.PUBLISHED, cutoff);
             if (batch.isEmpty()) break;
+
             for (Event e : batch) {
-                if (e.getStartsAt() != null && !e.getStartsAt().isAfter(now)) {
-                    e.setStatus(EventStatus.STARTED);
-                }
+                e.setStatus(EventStatus.CANCELLED);
             }
             eventRepository.saveAll(batch);
             total += batch.size();
@@ -62,13 +70,15 @@ public class EventLifecycleScheduler {
     private int promoteToFinished(OffsetDateTime now) {
         int total = 0;
         while (true) {
-            List<Event> batch = eventRepository.findTop1000ByStatus(EventStatus.STARTED);
+            List<Event> batch = eventRepository.findTop1000ByStatusOrderByStartsAtAsc(EventStatus.STARTED);
             if (batch.isEmpty()) break;
 
             List<Event> toSave = new ArrayList<>(batch.size());
             for (Event e : batch) {
-                if (e.getStartsAt() == null || e.getDurationMin() == null) continue;
-                OffsetDateTime end = e.getStartsAt().plusMinutes(e.getDurationMin());
+                if (e.getDurationMin() == null) continue;
+                OffsetDateTime base = (e.getLaunchedAt() != null) ? e.getLaunchedAt() : e.getStartsAt();
+                if (base == null) continue;
+                OffsetDateTime end = base.plusMinutes(e.getDurationMin());
                 if (!end.isAfter(now)) {
                     e.setStatus(EventStatus.FINISHED);
                     toSave.add(e);

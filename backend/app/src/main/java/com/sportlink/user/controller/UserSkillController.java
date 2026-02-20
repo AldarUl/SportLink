@@ -52,8 +52,10 @@ public class UserSkillController {
         UUID uid = currentUserId(auth);
         User user = userRepository.findById(uid).orElseThrow();
 
-        var skill = skillRepo.findByUserIdAndSportIgnoreCase(uid, sport)
-                .orElseGet(() -> UserSportSkill.builder().user(user).sport(sport).build());
+        String sportCode = (sport == null) ? null : sport.trim().toUpperCase();
+
+        var skill = skillRepo.findByUserIdAndSportIgnoreCase(uid, sportCode)
+                .orElseGet(() -> UserSportSkill.builder().user(user).sport(sportCode).build());
 
         skill.setLevel((short) req.level());
         skill = skillRepo.save(skill);
@@ -70,7 +72,8 @@ public class UserSkillController {
     @Operation(summary = "Удалить навык по спорту")
     @DeleteMapping("/{sport}")
     public void delete(@PathVariable String sport, Authentication auth) {
-        skillRepo.deleteByUserIdAndSportIgnoreCase(currentUserId(auth), sport);
+        String sportCode = (sport == null) ? null : sport.trim().toUpperCase();
+        skillRepo.deleteByUserIdAndSportIgnoreCase(currentUserId(auth), sportCode);
     }
 
     private UUID currentUserId(Authentication auth) {

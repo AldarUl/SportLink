@@ -41,6 +41,12 @@ public class AttendanceController {
         return attendanceService.mark(eventId, me(auth), req);
     }
 
+    // participant/organizer: get own mark (if exists)
+    @GetMapping("/me")
+    public AttendanceResponse getMe(@PathVariable UUID eventId, Authentication auth) {
+        return attendanceService.getMe(eventId, me(auth));
+    }
+
     // participant/organizer: mark self (ATTENDED/ABSENT)
     @PostMapping("/me")
     public AttendanceResponse markMe(@PathVariable UUID eventId,

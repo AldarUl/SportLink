@@ -1,7 +1,7 @@
 export type EventKind = "TRAINING" | "EVENT";
-export type EventAccess = "PUBLIC" | "CLUB_ONLY";
+export type EventAccess = "PUBLIC" | "PRIVATE";
 export type EventAdmission = "AUTO" | "MANUAL";
-export type EventStatus = "DRAFT" | "PUBLISHED" | "CANCELLED";
+export type EventStatus = "DRAFT" | "PUBLISHED" | "STARTED" | "FINISHED" | "CANCELLED";
 
 export type Event = {
   id: string;
@@ -18,38 +18,40 @@ export type Event = {
   recurrenceRule?: string | null;
   registrationDeadline?: string | null;
   organizerId: string;
-  clubId?: string | null;
   status: EventStatus;
+  levelMin?: number | null;
+  levelMax?: number | null;
+  launchedAt?: string | null;
+  launchedBy?: string | null;
   locationLat?: number | null;
   locationLon?: number | null;
 };
 
- export type Page<T> = {
-   content: T[];
-   page: number;
-   size: number;
-   totalElements: number;
-   totalPages: number;
-   last: boolean;
- };
- 
- export type EventQuery = {
-   kind?: "TRAINING" | "EVENT";
-   sport?: string;
-   from?: string;
-   to?: string;
-   access?: "PUBLIC" | "CLUB_ONLY";
-   admission?: "AUTO" | "MANUAL";
-   clubId?: string;
-   page?: number;
-   size?: number;
- };
- 
- export type Bbox = {
-   swLat: number;
-   swLon: number;
-   neLat: number;
-   neLon: number;
-    centerLat?: number;
-    centerLon?: number;
- };
+export type Page<T> = {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  last: boolean;
+};
+
+export type EventQuery = {
+  kind?: "TRAINING" | "EVENT";
+  sport?: string;
+  from?: string;
+  to?: string;
+  access?: "PUBLIC" | "PRIVATE";
+  admission?: "AUTO" | "MANUAL";
+  page?: number;
+  size?: number;
+};
+
+export type Bbox = {
+  swLat: number;
+  swLon: number;
+  neLat: number;
+  neLon: number;
+  centerLat?: number;
+  centerLon?: number;
+};

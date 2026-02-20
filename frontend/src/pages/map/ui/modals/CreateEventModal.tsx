@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { http } from "@/api/http";
+import { listSports } from "@/entities/sport/api";
+import { normalizeSportCode } from "@/shared/lib/sport";
 import type { LngLat } from "../../lib/geo";
 
 type Props = {
@@ -7,25 +9,11 @@ type Props = {
   kind: "EVENT" | "TRAINING";
   coords: LngLat;                // [lon, lat] — фиксируются из ПКМ
   onClose: () => void;
-  onCreated?: () => void;        // колбэк после успешного создания
+  onCreated?: (created?: any) => void; // колбэк после успешного создания
 };
 
-type Access = "PUBLIC" | "PRIVATE" | "CLUB_ONLY";
+type Access = "PUBLIC" | "PRIVATE";
 type Admission = "AUTO" | "MANUAL";
-
-/** Русские лейблы → англ. коды для API */
-const SPORTS = [
-  { value: "RUNNING",    label: "Бег" },
-  { value: "FOOTBALL",   label: "Футбол" },
-  { value: "BASKETBALL", label: "Баскетбол" },
-  { value: "TENNIS",     label: "Теннис" },
-  { value: "CYCLING",    label: "Велоспорт" },
-  { value: "SWIMMING",   label: "Плавание" },
-  { value: "GYM",        label: "Зал/Фитнес" },
-  { value: "YOGA",       label: "Йога" },
-  { value: "WALKING",    label: "Ходьба" },
-] as const;
-type Sport = typeof SPORTS[number]["value"];
 
 type CreatePayload = {
   kind: "EVENT" | "TRAINING";
@@ -57,7 +45,8 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
   if (!open) return null;
 
   const [title, setTitle] = useState("");
-  const [sport, setSport] = useState<Sport>("RUNNING");
+  const [sports, setSports] = useState<{code:string;name:string}[]>([]);
+  const [sport, setSport] = useState<string>("RUNNING");
   const [access, setAccess] = useState<Access>("PUBLIC");
   const [admission, setAdmission] = useState<Admission>("AUTO");
   const [durationMin, setDurationMin] = useState<number>(60);
@@ -73,6 +62,16 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
   useEffect(() => {
     if (kind === "TRAINING") setAdmission("MANUAL");
   }, [kind]);
+
+  useEffect(() => {
+    listSports()
+      .then((arr) => {
+        setSports(arr ?? []);
+        if ((arr ?? []).length && !sport) setSport(arr[0].code);
+      })
+      .catch(() => setSports([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // старт по умолчанию — ближайшие 15 минут, локальное время
   const defaultLocalStart = useMemo(() => {
@@ -117,7 +116,7 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
         access,
         admission: admissionForBackend,
         title: title.trim(),
-        sport,
+        sport: normalizeSportCode(sport),
         startsAt: startsAtISO,
         durationMin: Number(durationMin),
         capacity: Number(slots),
@@ -180,8 +179,7 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
             >
               <option value="PUBLIC">Публичный</option>
               <option value="PRIVATE">По приглашению</option>
-              <option value="CLUB_ONLY">Только для клуба</option>
-            </select>
+                          </select>
           </div>
 
           <div>
@@ -208,13 +206,26 @@ export const CreateEventModal: React.FC<Props> = ({ open, kind, coords, onClose,
             <select
               className="w-full rounded-md border px-3 py-2"
               value={sport}
-              onChange={(e) => setSport(e.target.value as Sport)}
+              onChange={(e) => setSport(e.target.value)}
             >
-              {SPORTS.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
+              {(sports && sports.length ? sports : []).map((s) => (
+                <option key={s.code} value={s.code}>{s.name}</option>
               ))}
+              {/* fallback: если /sport не доступен */}
+              {!sports?.length && (
+                <>
+                  <option value="RUNNING">Бег</option>
+                  <option value="FOOTBALL">Футбол</option>
+                  <option value="BASKETBALL">Баскетбол</option>
+                  <option value="VOLLEYBALL">Волейбол</option>
+                  <option value="TENNIS">Теннис</option>
+                  <option value="SWIMMING">Плавание</option>
+                  <option value="CYCLING">Велоспорт</option>
+                  <option value="YOGA">Йога</option>
+                  <option value="BOXING">Бокс</option>
+                  <option value="MMA">MMA</option>
+                </>
+              )}
             </select>
           </div>
 

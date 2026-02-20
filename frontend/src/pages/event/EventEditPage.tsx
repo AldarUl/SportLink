@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { getEvent, updateEvent } from "@/entities/event/api";
+import { listSports } from "@/entities/sport/api";
+import { normalizeSportCode } from "@/shared/lib/sport";
 import { useEventStore } from "@/entities/event/store";
 import { useAuthStore } from "@/features/auth/store";
 import type { Event, EventAccess, EventAdmission } from "@/entities/event/types";
@@ -27,6 +29,12 @@ export default function EventEditPage() {
   const [waitlistEnabled, setWaitlistEnabled] = useState<boolean>(false);
   const [locationLat, setLocationLat] = useState<number | undefined>(undefined);
   const [locationLon, setLocationLon] = useState<number | undefined>(undefined);
+  const [sports, setSports] = useState<{code:string;name:string}[]>([]);
+
+
+  useEffect(() => {
+    listSports().then(setSports).catch(() => setSports([]));
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -70,7 +78,7 @@ export default function EventEditPage() {
 
     const patch: Partial<Event> = {
       title: title.trim(),
-      sport: sport.trim(),
+      sport: normalizeSportCode(sport),
       startsAt: localToIso(startsAtLocal),
       durationMin,
       capacity,
@@ -115,8 +123,13 @@ export default function EventEditPage() {
         </L>
 
         <L label="Вид спорта">
-          <input className="w-full border rounded px-3 py-2"
-            value={sport} onChange={e => setSport(e.target.value)} />
+          <select className="w-full border rounded px-3 py-2"
+            value={sport}
+            onChange={e => setSport(e.target.value)}>
+            {(sports && sports.length ? sports : [{code: sport, name: sport}]).map((s) => (
+              <option key={s.code} value={s.code}>{s.name}</option>
+            ))}
+          </select>
         </L>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -147,7 +160,7 @@ export default function EventEditPage() {
             <select className="w-full border rounded px-3 py-2"
               value={access} onChange={e => setAccess(e.target.value as EventAccess)}>
               <option value="PUBLIC">PUBLIC</option>
-              <option value="CLUB_ONLY">CLUB_ONLY</option>
+              <option value="PRIVATE">PRIVATE</option>
             </select>
           </L>
 

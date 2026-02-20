@@ -34,7 +34,12 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new EntityNotFoundException("Event not found"));
 
         // событие должно завершиться
-        var endsAt = e.getStartsAt().plusMinutes(e.getDurationMin());
+        // При ручном запуске ориентируемся на launchedAt, иначе — на startsAt.
+        var base = (e.getLaunchedAt() != null) ? e.getLaunchedAt() : e.getStartsAt();
+        if (base == null || e.getDurationMin() == null) {
+            throw new IllegalStateException("Event time is not defined");
+        }
+        var endsAt = base.plusMinutes(e.getDurationMin());
         if (!OffsetDateTime.now().isAfter(endsAt)) {
             throw new IllegalStateException("Event not finished yet");
         }

@@ -5,6 +5,7 @@ import com.sportlink.auth.dto.LoginResponse;
 import com.sportlink.auth.dto.RefreshResponse;
 import com.sportlink.auth.model.RefreshToken;
 import com.sportlink.auth.repository.RefreshTokenRepository;
+import com.sportlink.common.exception.UnauthorizedException;
 import com.sportlink.user.model.User;
 import com.sportlink.user.repository.UserRepository;
 import jakarta.servlet.http.Cookie;
@@ -105,16 +106,16 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public RefreshResponse refresh(HttpServletRequest httpReq, HttpServletResponse httpResp) {
-        String raw = readRefreshCookie(httpReq).orElseThrow(() -> new RuntimeException("No refresh cookie"));
+        String raw = readRefreshCookie(httpReq).orElseThrow(() -> new UnauthorizedException("No refresh cookie"));
         String hash = sha256(raw);
 
         RefreshToken current = refreshRepo.findByTokenHashAndRevokedAtIsNull(hash)
-                .orElseThrow(() -> new RuntimeException("Refresh not found or revoked"));
+                .orElseThrow(() -> new UnauthorizedException("Refresh not found or revoked"));
 
         if (current.getExpiresAt().isBefore(Instant.now())) {
             // Срок вышел: блокируем семейство и ошибка
             refreshRepo.deleteByFamilyId(current.getFamilyId());
-            throw new RuntimeException("Refresh expired");
+            throw new UnauthorizedException("Refresh expired");
         }
 
         // Ротация: создаём новый refresh, старый помечаем replaced_by + revoked_at
@@ -138,7 +139,15 @@ public class AuthServiceImpl implements AuthService {
         refreshRepo.save(current);
 
         // Access
-        String access = jwt.createAccessJwt(current.getUserId().toString(), Map.of("uid", current.getUserId().toString()));
+        // ВАЖНО: subject в access JWT должен быть email (см. JwtAuthFilter + UserDetailsServiceImpl),
+        // иначе после refresh все защищённые эндпоинты будут видеть пользователя как anonymous -> 403.
+// стало
+        User user = userRepository.findById(current.getUserId())
+                .orElseThrow(() -> new UnauthorizedException("User not found"));
+        String access = jwt.createAccessJwt(user.getEmail(), Map.of(
+                "uid", user.getId().toString(),
+                "role", user.getRole().name()
+        ));
         setRefreshCookie(httpResp, newRaw, (int) (refreshTtlDays * 24 * 3600));
 
         return new RefreshResponse(access, jwt.getAccessTtlSeconds());

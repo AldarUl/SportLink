@@ -23,7 +23,13 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
 
     List<Event> findTop1000ByStatus(EventStatus status);
 
+    // старые/самые ранние первыми — удобно для завершения событий
+    List<Event> findTop1000ByStatusOrderByStartsAtAsc(EventStatus status);
+
     List<Event> findTop1000ByStatusAndStartsAtBefore(EventStatus status, OffsetDateTime before);
+
+    // события, которые так и не были запущены вручную
+    List<Event> findTop1000ByStatusAndStartsAtBeforeAndLaunchedAtIsNull(EventStatus status, OffsetDateTime before);
 
     Page<Event> findAll(Pageable pageable);
     Page<Event> findByStatus(EventStatus status, Pageable pageable);

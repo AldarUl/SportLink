@@ -1,17 +1,39 @@
+// src/entities/attendance/api.ts
+
 import { http } from "@/api/http";
-import type { Attendance, AttendanceStatus } from "./types";
+import type { AttendanceResponse, AttendanceStatus } from "./types";
 
-export async function getMyAttendance(eventId: string): Promise<Attendance | null> {
-  const { data } = await http.get(`/attendance/event/${eventId}/me`);
-  return data ?? null;
-}
+// Backend routes (см. AttendanceController):
+// GET  /api/v1/event/{eventId}/attendance/me
+// POST /api/v1/event/{eventId}/attendance/me?status=...
+// POST /api/v1/event/{eventId}/attendance   (body: { userId, status })
+// GET  /api/v1/event/{eventId}/attendance   (organizer only)
 
-export async function setMyAttendance(eventId: string, status: AttendanceStatus): Promise<Attendance> {
-  const { data } = await http.post(`/attendance/event/${eventId}/me`, { status });
-  return data;
-}
+export const getMyAttendance = async (eventId: string): Promise<AttendanceResponse> => {
+  const res = await http.get(`/event/${eventId}/attendance/me`);
+  return res.data;
+};
 
-export async function setAttendanceForUser(eventId: string, userId: string, status: AttendanceStatus): Promise<Attendance> {
-  const { data } = await http.post(`/attendance/event/${eventId}/user/${userId}`, { status });
-  return data;
-}
+export const setMyAttendance = async (
+  eventId: string,
+  status: AttendanceStatus
+): Promise<AttendanceResponse> => {
+  const res = await http.post(`/event/${eventId}/attendance/me`, null, {
+    params: { status },
+  });
+  return res.data;
+};
+
+export const setAttendanceForUser = async (
+  eventId: string,
+  userId: string,
+  status: AttendanceStatus
+): Promise<AttendanceResponse> => {
+  const res = await http.post(`/event/${eventId}/attendance`, { userId, status });
+  return res.data;
+};
+
+export const listAttendance = async (eventId: string): Promise<AttendanceResponse[]> => {
+  const res = await http.get(`/event/${eventId}/attendance`);
+  return res.data;
+};

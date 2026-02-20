@@ -1,0 +1,15 @@
+-- V2__event_constraints.sql
+-- Приводим CHECK-ограничения в таблице event к enum'ам приложения.
+-- Нужно, чтобы работали статусы STARTED/FINISHED и доступ PRIVATE.
+
+-- status: DRAFT | PUBLISHED | STARTED | FINISHED | CANCELLED
+ALTER TABLE event DROP CONSTRAINT IF EXISTS chk_event_status;
+ALTER TABLE event
+  ADD CONSTRAINT chk_event_status
+  CHECK (status IN ('DRAFT','PUBLISHED','STARTED','FINISHED','CANCELLED'));
+
+-- access: PUBLIC | PRIVATE | CLUB_ONLY (CLUB_ONLY оставляем для обратной совместимости)
+ALTER TABLE event DROP CONSTRAINT IF EXISTS chk_event_access;
+ALTER TABLE event
+  ADD CONSTRAINT chk_event_access
+  CHECK (access IN ('PUBLIC','PRIVATE','CLUB_ONLY'));

@@ -3,6 +3,7 @@ package com.sportlink.application.controller;
 import com.sportlink.application.dto.ApplicationCreateRequest;
 import com.sportlink.application.dto.ApplicationPage;
 import com.sportlink.application.dto.ApplicationResponse;
+import com.sportlink.application.dto.ApplicationWithEventResponse;
 import com.sportlink.application.service.ApplicationService;
 import com.sportlink.user.model.User;
 import com.sportlink.user.repository.UserRepository;
@@ -13,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
+import java.util.List;
 
 @io.swagger.v3.oas.annotations.tags.Tag(name = "Application", description = "Заявки на участие")
 @RestController
@@ -60,6 +62,23 @@ public class ApplicationController {
                               Authentication auth) {
         return applicationService.listMy(currentUserId(auth), page, Math.min(Math.max(size, 1), 100));
     }
+
+    /** Legacy: мои заявки без пагинации + вложенное событие (нужно фронту) */
+    @io.swagger.v3.oas.annotations.Operation(summary = "Мои заявки (legacy, без пагинации)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/mine")
+    public List<ApplicationWithEventResponse> mine(Authentication auth) {
+        return applicationService.listMine(currentUserId(auth));
+    }
+
+    /** Legacy: отозвать заявку через DELETE (как на фронте) */
+    @io.swagger.v3.oas.annotations.Operation(summary = "Отозвать заявку (legacy DELETE)")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/{applicationId}")
+    public void withdrawDelete(@PathVariable UUID applicationId, Authentication auth) {
+        applicationService.withdraw(applicationId, currentUserId(auth));
+    }
+
 
     /** Отозвать свою заявку */
     @io.swagger.v3.oas.annotations.Operation(summary = "Отозвать свою заявку")

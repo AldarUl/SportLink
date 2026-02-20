@@ -15,6 +15,32 @@ import SkillsGate from "@/features/skills/SkillsGate";
 import ProfilePage from "@/pages/profile/ProfilePage";
 
 
+function getJwtExpMs(token: string | null | undefined): number | null {
+  if (!token) return null;
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    // base64url -> base64
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const json = decodeURIComponent(
+      atob(b64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    const payload = JSON.parse(json);
+    return typeof payload?.exp === "number" ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function shouldRefreshSoon(token: string | null | undefined, withinMs = 90_000) {
+  const exp = getJwtExpMs(token);
+  if (!exp) return false;
+  return exp - Date.now() < withinMs;
+}
+
 
 function Nav() {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -73,6 +99,44 @@ export default function App() {
       useApplicationStore.getState().loadMine().catch(() => {});
     }
   }, [accessToken]);
+
+  // 3) Авто-обновление accessToken до истечения (чтобы после простоя не ловить 403 в панелях)
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const expMs = getJwtExpMs(accessToken);
+    if (!expMs) return;
+
+    // обновляем за 60 секунд до exp
+    const refreshAt = expMs - 60_000;
+    const delay = Math.max(1_000, refreshAt - Date.now());
+
+    const t = window.setTimeout(() => {
+      tryRefresh().catch(() => {
+        // если refresh-cookie тоже протухла — редиректим
+        try { useAuthStore.getState().logout(); } catch {}
+        window.location.replace("/auth/login");
+      });
+    }, delay);
+
+    return () => window.clearTimeout(t);
+  }, [accessToken]);
+
+  // 4) Если вкладка была в фоне и вернулись — освежаем токен, если скоро истечёт
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      const tok = useAuthStore.getState().accessToken;
+      if (tok && shouldRefreshSoon(tok, 2 * 60_000)) {
+        tryRefresh().catch(() => {
+          try { useAuthStore.getState().logout(); } catch {}
+          window.location.replace("/auth/login");
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   if (!booted) return null;                                 // можно поставить лоадер
 

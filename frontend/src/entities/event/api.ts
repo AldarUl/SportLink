@@ -1,25 +1,32 @@
 import { http } from "@/api/http";
 import type { Event, Page, EventQuery, Bbox } from "./types";
+import { normalizeSportCode } from "@/shared/lib/sport";
 
 /** Нормализация Event под контракт Swagger */
 function toEvent(e: any): Event {
+  const accessRaw = String(e?.access ?? "PUBLIC").toUpperCase();
+  const access: Event["access"] = accessRaw === "PUBLIC" ? "PUBLIC" : "PRIVATE";
+
   return {
     id: String(e.id),
     kind: e.kind,                              // "TRAINING" | "EVENT"
     title: e.title,
-    sport: e.sport,
+    sport: normalizeSportCode(e.sport),
     description: e.description ?? null,
     startsAt: e.startsAt,                      // ISO
     durationMin: e.durationMin,
     capacity: e.capacity ?? undefined,
     waitlistEnabled: e.waitlistEnabled ?? undefined,
-    access: e.access,                          // "PUBLIC" | "CLUB_ONLY"
+    access,                                    // "PUBLIC" | "PRIVATE"
     admission: e.admission,                    // "AUTO" | "MANUAL"
     recurrenceRule: e.recurrenceRule ?? null,
     registrationDeadline: e.registrationDeadline ?? null,
     organizerId: String(e.organizerId),
-    clubId: e.clubId ?? null,
-    status: e.status,                          // "DRAFT" | "PUBLISHED" | "CANCELLED"
+    status: e.status,                          // "DRAFT" | "PUBLISHED" | "STARTED" | "FINISHED" | "CANCELLED"
+    levelMin: e.levelMin ?? null,
+    levelMax: e.levelMax ?? null,
+    launchedAt: e.launchedAt ?? null,
+    launchedBy: e.launchedBy ?? null,
     locationLat: e.locationLat ?? null,
     locationLon: e.locationLon ?? null,
   };
@@ -76,17 +83,22 @@ export async function createEvent(payload: {
   waitlistEnabled?: boolean;
   recurrenceRule?: string;
   registrationDeadline?: string;
-  clubId?: string;
   locationLat?: number;
   locationLon?: number;
 }): Promise<Event> {
-  const { data } = await http.post("/event", payload);
+  const { data } = await http.post("/event", {
+    ...payload,
+    sport: normalizeSportCode(payload.sport),
+  });
   return toEvent(data);
 }
 
 /** Частичное обновление события */
 export async function updateEvent(id: string, patch: Partial<Event>): Promise<Event> {
-  const { data } = await http.patch(`/event/${id}`, patch);
+  const { data } = await http.patch(`/event/${id}`, {
+    ...patch,
+    sport: patch.sport ? normalizeSportCode(patch.sport) : undefined,
+  });
   return toEvent(data);
 }
 
@@ -96,6 +108,11 @@ export async function publishEvent(id: string): Promise<void> {
 }
 export async function cancelEvent(id: string): Promise<void> {
   await http.post(`/event/${id}/cancel`, {});
+}
+
+/** Удаление события */
+export async function deleteEvent(id: string): Promise<void> {
+  await http.delete(`/event/${id}`);
 }
 
 /** Клиентская фильтрация по BBOX (fallback) */
@@ -152,7 +169,7 @@ export async function fetchEventsByBbox(
 
     const { data } = await http.get("/event", { params });
     const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
-    return arr.map(toEvent);
+    return (arr as any[]).map(toEvent);
   } catch {
     const page = await searchEvents({
       size,
@@ -164,13 +181,15 @@ export async function fetchEventsByBbox(
   }
 }
 
-/** Удаление события */
-export async function deleteEvent(id: string): Promise<void> {
-  await http.delete(`/event/${id}`);
-}
-
-
 export async function launchEvent(id: string) {
   const { data } = await http.post(`/event/${id}/launch`);
   return toEvent(data);
+}
+
+/** Мои события как организатора (включая вне текущего вьюпорта карты) */
+export async function listMyOrganizedEvents(options?: { futureOnly?: boolean; page?: number; size?: number }): Promise<Event[]> {
+  const { futureOnly = false, page = 0, size = 200 } = options ?? {};
+  const { data } = await http.get("/event/my", { params: { futureOnly, page, size } });
+  const arr = Array.isArray(data) ? data : (data?.content ?? data?.items ?? []);
+  return (arr as any[]).map(toEvent);
 }

@@ -2,6 +2,7 @@ import React from "react";
 import type { Event as AppEvent } from "@/entities/event/types";
 import type { LngLat } from "../../lib/geo";
 import { formatDateTime } from "../../lib/fmt";
+import { sportLabel } from "@/shared/lib/sport";
 import { PopupCard } from "../PopupCard";
 
 
@@ -36,7 +37,7 @@ export function EventMarker({
   onClose: () => void;
 }) {
   const title = e.title;
-  const subtitle = `Событие • ${e.sport ?? ""} • ${formatDateTime(e.startsAt)}`;
+  const subtitle = `Событие • ${sportLabel(e.sport) ?? ""} • ${formatDateTime(e.startsAt)}`;
   const PIN = 52, TAIL = 12, HALO = 12;
 
   const wrapStyle: React.CSSProperties = {
@@ -103,9 +104,6 @@ export function EventMarker({
               e={e}
               myPos={myPos ?? null}
               coords={coords}
-              hasApp={hasApp}
-              onApply={onApply}
-              onWithdraw={onWithdraw}
               onClose={onClose}
               onMore={onMore}
             />
