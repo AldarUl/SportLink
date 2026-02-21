@@ -17,6 +17,10 @@ import {
   type UserSkill,
 } from "@/features/skills/api";
 import { useAuthStore } from "@/features/auth/store";
+import { useApplicationStore } from "@/entities/application/store";
+import { listReviewsByEvent } from "@/entities/review/api";
+import type { Review } from "@/entities/review/types";
+import { http } from "@/api/http";
 import ProfileHeader from "./components/ProfileHeader";
 import SkillsSection from "./components/SkillsSection";
 import ProfileEditPanel from "./components/ProfileEditPanel";
@@ -32,6 +36,9 @@ export default function ProfilePage() {
   const params = useParams();
   const me = useAuthStore((s: any) => s.user || null);
   const setMe = useAuthStore((s: any) => s.setUser);
+  const accessToken = useAuthStore((s: any) => s.accessToken);
+
+  const loadMineApps = useApplicationStore((s: any) => s.loadMine);
 
   const paramId = params.id ? String(params.id) : null;
   const amI = !paramId || (me?.id && String(me.id) === paramId);
@@ -53,6 +60,14 @@ export default function ProfilePage() {
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
   const [imgLoaded, setImgLoaded] = React.useState(false);
+
+  type ReceivedReview = Review & {
+    eventTitle?: string;
+    authorName?: string;
+  };
+  const [receivedReviews, setReceivedReviews] = React.useState<ReceivedReview[]>([]);
+  const [avgRating, setAvgRating] = React.useState<number | null>(null);
+  const [reviewsLoading, setReviewsLoading] = React.useState(false);
 
   React.useEffect(() => {
     return () => {
@@ -92,6 +107,118 @@ export default function ProfilePage() {
       ignore = true;
     };
   }, [targetId, amI, setMe]);
+
+  // Оценки, полученные пользователем (делаем для своего профиля на основе событий, где есть отзывы)
+  React.useEffect(() => {
+    if (!amI || !targetId || !accessToken) {
+      setReceivedReviews([]);
+      setAvgRating(null);
+      return;
+    }
+
+    let ignore = false;
+    (async () => {
+      setReviewsLoading(true);
+      try {
+        // 1) пытаемся взять legacy-выдачу (с вложенным событием), чтобы не тянуть события по одному
+        let mineLegacy: any[] | null = null;
+        try {
+          const { data } = await http.get("/application/mine");
+          mineLegacy = Array.isArray(data) ? data : null;
+        } catch {
+          mineLegacy = null;
+        }
+
+        // 2) fallback: загрузим обычные заявки, если legacy недоступен
+        if (!mineLegacy) {
+          try {
+            await loadMineApps?.(0, 200);
+          } catch {}
+        }
+
+        const mineNow = mineLegacy ?? ((useApplicationStore.getState() as any).mine as any[]);
+
+        // подсказки по названиям событий
+        const titleByEventId = new Map<string, string>();
+        for (const a of mineNow || []) {
+          const id = String(a?.eventId || "").toLowerCase();
+          const t = a?.event?.title;
+          if (id && t) titleByEventId.set(id, String(t));
+        }
+
+        // берём только те события, по которым есть шанс получить отзывы (завершённые или уже прошедшие)
+        const now = Date.now();
+        const candidateEventIds = Array.from(
+          new Set(
+            (mineNow || [])
+              .filter((a) => {
+                const ev = a?.event;
+                if (!ev) return false;
+                const st = String(ev.status || "").toUpperCase();
+                if (st === "FINISHED") return true;
+                const startBase = Date.parse(ev.launchedAt || ev.startsAt);
+                const dur = Number(ev.durationMin || 0);
+                const end = startBase + dur * 60 * 1000;
+                return Number.isFinite(end) && end < now;
+              })
+              .map((a) => String(a?.eventId || "").toLowerCase())
+              .filter(Boolean)
+          )
+        );
+
+        // запросы отзывов по каждому событию (targetId фильтрует только отзывы о пользователе)
+        const pages = await Promise.allSettled(
+          candidateEventIds.map((eventId) => listReviewsByEvent(eventId, targetId, 0, 50))
+        );
+
+        const all: Review[] = [];
+        for (const r of pages) {
+          if (r.status === "fulfilled") {
+            const content = r.value?.content ?? [];
+            for (const it of content) all.push(it);
+          }
+        }
+
+        if (ignore) return;
+
+        // авторы
+        const authorIds = Array.from(new Set(all.map((x) => String(x.authorId)).filter(Boolean)));
+        const authorRes = await Promise.allSettled(authorIds.map((id) => getUser(id)));
+        const authorNameById = new Map<string, string>();
+        authorRes.forEach((r, idx) => {
+          const id = authorIds[idx];
+          if (r.status === "fulfilled") {
+            const u = r.value as any;
+            authorNameById.set(id, u?.displayName || u?.email || id);
+          }
+        });
+
+        const enriched: ReceivedReview[] = all
+          .map((x) => {
+            const evId = String(x.eventId).toLowerCase();
+            return {
+              ...x,
+              eventTitle: titleByEventId.get(evId) || "Тренировка / событие",
+              authorName: authorNameById.get(String(x.authorId)) || "Пользователь",
+            };
+          })
+          .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+
+        const avg = enriched.length
+          ? enriched.reduce((sum, x) => sum + Number(x.rating || 0), 0) / enriched.length
+          : null;
+
+        setReceivedReviews(enriched);
+        setAvgRating(avg ? Math.round(avg * 10) / 10 : null);
+      } finally {
+        if (!ignore) setReviewsLoading(false);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [amI, targetId, accessToken, loadMineApps]);
 
   const avatarSrc = previewUrl || user?.avatarUrl || null;
 
@@ -216,8 +343,56 @@ export default function ProfilePage() {
         avatarUploading={avatarUploading}
         onPickFile={handlePickAvatar}
         onRemove={handleRemoveAvatar}
-        extra={<div className="mt-1 text-sm text-gray-600">Роль: {roleLabel(user)}</div>}
+        extra={
+          <div className="mt-1 space-y-1 text-sm text-gray-600">
+            <div>Роль: {roleLabel(user)}</div>
+            {avgRating != null && (
+              <div>
+                Средняя оценка: <span className="font-semibold text-gray-900">{avgRating}</span> / 5
+                {receivedReviews.length ? ` (${receivedReviews.length})` : ""}
+              </div>
+            )}
+          </div>
+        }
       />
+
+      {amI && (
+        <div className="rounded-xl border p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-semibold">Оценки</div>
+            {avgRating != null && (
+              <div className="text-sm text-gray-700">
+                Средняя: <span className="font-semibold text-gray-900">{avgRating}</span> / 5
+              </div>
+            )}
+          </div>
+
+          {reviewsLoading ? (
+            <div className="text-sm text-gray-600">Загрузка оценок…</div>
+          ) : !receivedReviews.length ? (
+            <div className="text-sm text-gray-600">Пока нет полученных оценок.</div>
+          ) : (
+            <div className="space-y-2">
+              {receivedReviews.map((r) => (
+                <div key={r.id} className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{r.eventTitle}</div>
+                    <div className="text-xs text-gray-500">
+                      От: <span className="text-gray-800">{r.authorName}</span>
+                      {r.createdAt ? ` · ${new Date(r.createdAt).toLocaleString("ru-RU")}` : ""}
+                    </div>
+                    {r.comment && <div className="mt-1 text-sm text-gray-800">{r.comment}</div>}
+                  </div>
+
+                  <div className="shrink-0 rounded-lg bg-gray-900 px-2.5 py-1 text-sm font-semibold text-white">
+                    {r.rating}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <SkillsSection
         sports={sports}

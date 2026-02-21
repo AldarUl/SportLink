@@ -259,8 +259,10 @@ export function OrganizerPanel({
           const closed = Number.isFinite(regTs) && now >= regTs && !started;
 
           // capacity/waitlist
-          const capacity: number | null = typeof e.capacity === "number" && e.capacity > 0 ? e.capacity : null;
-          const waitlistEnabled = !!e.waitlistEnabled;
+          // Важно: на бэке capacity — это ОБЩЕЕ число мест, включая организатора (организатор автоматически CONFIRMED).
+          // В интерфейсе считаем места ДЛЯ участников: capacity - 1.
+          const capacityTotal: number | null = typeof e.capacity === "number" && e.capacity > 0 ? e.capacity : null;
+          const capacityForParticipants: number | null = capacityTotal !== null ? Math.max(0, capacityTotal - 1) : null;
 
           // ✅ confirmed показываем всегда (не зависит от opened)
           const confirmedApps = apps.filter((a) => a.status === "CONFIRMED");
@@ -269,8 +271,8 @@ export function OrganizerPanel({
           const waitingCount = apps.filter((a) => a.status === "PENDING" || a.status === "WAITLISTED").length;
           const declinedCount = apps.filter((a) => a.status === "DECLINED").length;
 
-          const full = capacity !== null && confirmedCount >= capacity;
-          const available = capacity === null ? Infinity : Math.max(0, capacity - confirmedCount);
+          const full = capacityForParticipants !== null && confirmedCount >= capacityForParticipants;
+          const available = capacityForParticipants === null ? Infinity : Math.max(0, capacityForParticipants - confirmedCount);
 
           const visibleApps = apps.filter((a) =>
             tab === "WAITING" ? a.status === "PENDING" || a.status === "WAITLISTED" : a.status === "DECLINED"
@@ -305,7 +307,6 @@ export function OrganizerPanel({
           };
 
           const waitingTeaser = counts[evId] ?? waitingCount;
-          const showConfirmBulk = waitlistEnabled;
 
           const canShowLocation = Boolean(onShowLocation && e.locationLat != null && e.locationLon != null);
 
@@ -327,8 +328,8 @@ export function OrganizerPanel({
 
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-gray-600">
                     <span>
-                      Подтверждено: <b>{confirmedCount}</b>
-                      {capacity !== null ? `/${capacity}` : ""}
+                      Участники: <b>{confirmedCount}</b>
+                      {capacityForParticipants !== null ? `/${capacityForParticipants}` : ""}
                     </span>
                     <span className="mx-1">·</span>
                     <span>
@@ -338,34 +339,38 @@ export function OrganizerPanel({
                     {full && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Мест нет</span>}
                     {closed && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">Набор закрыт</span>}
                     {started && <span className="rounded bg-red-50 px-1.5 py-0.5 text-red-700">Запущено</span>}
-                    {schedulePassed && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">Ждёт запуска</span>}
                     {finished && <span className="rounded bg-gray-50 px-1.5 py-0.5 text-gray-700">Завершено</span>}
                     {cancelled && <span className="rounded bg-gray-50 px-1.5 py-0.5 text-gray-700">Отменено</span>}
-                    {waitlistEnabled && <span className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">Лист ожидания</span>}
                   </div>
                 </div>
 
-                <div className="flex items-start gap-2">
-                  {canShowLocation && (
-                    <button
-                      className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                      onClick={() => onShowLocation?.(e)}
-                      title="Показать место на карте"
-                    >
-                      Показать
-                    </button>
+                <div className="flex items-start justify-end">
+                  {schedulePassed && (
+                    <span className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">Ждёт запуска</span>
                   )}
+                </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                {canShowLocation && (
                   <button
                     className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                    onClick={copyLink}
-                    title="Скопировать ссылку"
+                    onClick={() => onShowLocation?.(e)}
+                    title="Показать место на карте"
                   >
-                    Ссылка
+                    Показать
                   </button>
-                  <Link to={`/event/${evId}`} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
-                    Подробнее
-                  </Link>
-                </div>
+                )}
+                <button
+                  className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                  onClick={copyLink}
+                  title="Скопировать ссылку"
+                >
+                  Ссылка
+                </button>
+                <Link to={`/event/${evId}`} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
+                  Подробнее
+                </Link>
               </div>
 
               {/* ✅ подтверждённые участники — всегда видны */}
@@ -415,52 +420,46 @@ export function OrganizerPanel({
 
                   {!err && (
                     <>
-                      <div className="flex items-start justify-between gap-2">
-                        {/* табы */}
-                        <div className="flex flex-col gap-1">
-                          <TabBtn
-                            active={tab === "WAITING"}
-                            onClick={() => setFilters((f) => ({ ...f, [evId]: "WAITING" }))}
-                          >
-                            Лист ожидания {waitingCount}
-                          </TabBtn>
-                          <TabBtn
-                            active={tab === "DECLINED"}
-                            onClick={() => setFilters((f) => ({ ...f, [evId]: "DECLINED" }))}
-                          >
-                            Отклонённые {declinedCount}
-                          </TabBtn>
-                        </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <TabBtn
+                          active={tab === "WAITING"}
+                          onClick={() => setFilters((f) => ({ ...f, [evId]: "WAITING" }))}
+                        >
+                          Лист ожидания {waitingCount}
+                        </TabBtn>
 
-                        {/* массовые действия */}
-                        <div className="flex flex-col items-end gap-1">
-                          {showConfirmBulk && (
-                            <button
-                              disabled={!canBulkConfirm || busy}
-                              className={`rounded-md px-2 py-1 text-xs ${
-                                !canBulkConfirm || busy
-                                  ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
-                                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                              }`}
-                              onClick={doBulkConfirm}
-                              title={started ? "Событие уже началось" : full ? "Свободных мест нет" : "Подтвердить всех"}
-                            >
-                              {busy ? "..." : "Подтвердить всех"}
-                            </button>
-                          )}
-                          <button
-                            disabled={!canBulkDecline || busy}
-                            className={`rounded-md px-2 py-1 text-xs ${
-                              !canBulkDecline || busy
-                                ? "cursor-not-allowed bg-red-50 text-red-600/50"
-                                : "bg-red-50 text-red-600 hover:bg-red-100"
-                            }`}
-                            onClick={doBulkDecline}
-                            title={started ? "Событие уже началось" : "Отклонить всех"}
-                          >
-                            {busy ? "..." : "Отклонить всех"}
-                          </button>
-                        </div>
+                        <TabBtn
+                          active={tab === "DECLINED"}
+                          onClick={() => setFilters((f) => ({ ...f, [evId]: "DECLINED" }))}
+                        >
+                          Отклонённые {declinedCount}
+                        </TabBtn>
+
+                        <button
+                          disabled={!canBulkConfirm || busy}
+                          className={`rounded-md px-2 py-1 text-xs ${
+                            !canBulkConfirm || busy
+                              ? "cursor-not-allowed bg-emerald-50 text-emerald-700/50"
+                              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          }`}
+                          onClick={doBulkConfirm}
+                          title={started ? "Событие уже началось" : full ? "Свободных мест нет" : "Подтвердить всех"}
+                        >
+                          {busy ? "..." : "Подтвердить всех"}
+                        </button>
+
+                        <button
+                          disabled={!canBulkDecline || busy}
+                          className={`rounded-md px-2 py-1 text-xs ${
+                            !canBulkDecline || busy
+                              ? "cursor-not-allowed bg-red-50 text-red-600/50"
+                              : "bg-red-50 text-red-600 hover:bg-red-100"
+                          }`}
+                          onClick={doBulkDecline}
+                          title={started ? "Событие уже началось" : "Отклонить всех"}
+                        >
+                          {busy ? "..." : "Отклонить всех"}
+                        </button>
                       </div>
 
                       {!visibleApps.length && (
@@ -470,7 +469,7 @@ export function OrganizerPanel({
                       {visibleApps.map((a) => {
                         const isDeclined = a.status === "DECLINED";
                         const disabledRow = !!rowPending[a.id];
-                        const canConfirm = !disabledRow && !started && !isDeclined && (capacity === null || confirmedCount < capacity);
+                        const canConfirm = !disabledRow && !started && !isDeclined && (capacityForParticipants === null || confirmedCount < capacityForParticipants);
                         const canDecline = !disabledRow && !started && !isDeclined;
 
                         return (

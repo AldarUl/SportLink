@@ -44,23 +44,31 @@ function shouldRefreshSoon(token: string | null | undefined, withinMs = 90_000) 
 
 function Nav() {
   const accessToken = useAuthStore((s) => s.accessToken);
-  const user = useAuthStore((s) => s.user);
   const isAuthed = Boolean(accessToken);
 
   return (
-    <div className="flex items-center justify-between border-b px-4 py-2">
-      <Link to="/map" className="font-semibold">SportLink</Link>
-      <div className="flex items-center gap-3">
-        <Link to="/map">Карта</Link>
-        <Link to="/messages">Сообщения</Link>
+    <div className="grid grid-cols-3 items-center border-b px-4 py-2">
+      {/* left spacer */}
+      <div />
 
+      {/* centered logo */}
+      <Link
+        to="/map"
+        className="sportlink-wordmark justify-self-center text-2xl font-extrabold tracking-wide"
+        aria-label="SportLink"
+      >
+        SportLink
+      </Link>
+
+      {/* right actions */}
+      <div className="justify-self-end flex items-center gap-2">
         {isAuthed ? (
           <>
             <Link to="/profile" className="rounded-full border px-3 py-1">
-              {user?.displayName?.split(" ")[0] || user?.email}
+              Мой профиль
             </Link>
             <button onClick={() => logout()} className="rounded bg-black px-3 py-1 text-white">
-              Logout
+              Выйти
             </button>
           </>
         ) : (

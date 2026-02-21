@@ -19,6 +19,14 @@ export default function SkillsSection({
   const [newSport, setNewSport] = React.useState<string>(sports?.[0]?.code ?? "");
   const [newLevel, setNewLevel] = React.useState<number>(1);
 
+  const LEVELS: Array<{ value: number; label: string }> = [
+    { value: 1, label: "Новичок" },
+    { value: 2, label: "Любитель" },
+    { value: 3, label: "Уверенный" },
+    { value: 4, label: "Продвинутый" },
+    { value: 5, label: "Профи" },
+  ];
+
   const nameByCode = React.useMemo(() => {
     const m = new Map<string, string>();
     (sports || []).forEach((s) => m.set(s.code, s.name));
@@ -79,9 +87,9 @@ export default function SkillsSection({
               onChange={(e) => setNewLevel(Number(e.target.value))}
               disabled={saving}
             >
-              {[1, 2, 3, 4, 5].map((n) => (
-                <option key={n} value={n}>
-                  {n}
+              {LEVELS.map((x) => (
+                <option key={x.value} value={x.value}>
+                  {x.label}
                 </option>
               ))}
             </select>

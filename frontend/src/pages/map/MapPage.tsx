@@ -23,6 +23,8 @@ import { DragDock } from "./ui/dock/DragDock";
 import { MyTrainingsPanel } from "./panels/MyTrainingsPanel";
 import { OrganizerPanel } from "./panels/OrganizerPanel";
 
+import { SPORTS_FALLBACK, normalizeSportCode } from "@/shared/lib/sport";
+
 import "./styles/mapPins.css";
 
 type ContextMenuState = {
@@ -54,6 +56,19 @@ function visibleOnMap(e: AppEvent, nowMs: number) {
   // если по времени уже закончилось — скрываем, даже если статус ещё не обновился
   if (Number.isFinite(endsAtMs(e)) && nowMs > endsAtMs(e)) return false;
   return true;
+}
+
+function passesLevelRangeFilter(e: AppEvent, levelFrom: number | "", levelTo: number | "") {
+  if (levelFrom === "" && levelTo === "") return true;
+
+  const from = levelFrom === "" ? 1 : Number(levelFrom);
+  const to = levelTo === "" ? 5 : Number(levelTo);
+
+  const min = e.levelMin == null ? 1 : Number(e.levelMin);
+  const max = e.levelMax == null ? 5 : Number(e.levelMax);
+
+  // пересечение диапазонов (event range vs filter range)
+  return max >= from && min <= to;
 }
 
 export default function MapPage() {
@@ -101,6 +116,11 @@ export default function MapPage() {
 
   const [selected, setSelected] = useState<{ e: AppEvent; coords: LngLat } | null>(null);
   const [pressedId, setPressedId] = useState<string | null>(null);
+
+  // client-side filters for map markers
+  const [sportFilter, setSportFilter] = useState<string>("");
+  const [levelFromFilter, setLevelFromFilter] = useState<number | "">("");
+  const [levelToFilter, setLevelToFilter] = useState<number | "">("");
 
   const lastBoundsRef = useRef<YBounds | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -179,18 +199,36 @@ export default function MapPage() {
   }, [events, appliedEvents, myOrganizedEvents]);
 
   useEffect(() => {
-    if (selected && !allEvents.some((x) => String(x.id).toLowerCase() === String(selected.e.id).toLowerCase())) {
+    if (!selected) return;
+    const id = String(selected.e.id).toLowerCase();
+    const ev = (allEvents as AppEvent[]).find((x) => String(x.id).toLowerCase() === id);
+    if (!ev) {
       setSelected(null);
+      return;
     }
-  }, [allEvents, selected]);
 
-  const markers = useMemo(
-    () =>
-      (allEvents as AppEvent[])
-        .filter((e) => e.locationLat != null && e.locationLon != null)
-        .filter((e) => visibleOnMap(e, nowMs)),
-    [allEvents, nowMs]
-  );
+    // если не проходит фильтры — закрываем попап
+    if (sportFilter && normalizeSportCode(ev.sport) !== sportFilter) {
+      setSelected(null);
+      return;
+    }
+    if (!passesLevelRangeFilter(ev, levelFromFilter, levelToFilter)) {
+      setSelected(null);
+      return;
+    }
+  }, [allEvents, selected, sportFilter, levelFromFilter, levelToFilter]);
+
+  const markers = useMemo(() => {
+    const base = (allEvents as AppEvent[])
+      .filter((e) => e.locationLat != null && e.locationLon != null)
+      .filter((e) => visibleOnMap(e, nowMs));
+
+    return base.filter((e) => {
+      if (sportFilter && normalizeSportCode(e.sport) !== sportFilter) return false;
+      if (!passesLevelRangeFilter(e, levelFromFilter, levelToFilter)) return false;
+      return true;
+    });
+  }, [allEvents, nowMs, sportFilter, levelFromFilter, levelToFilter]);
 
   const myOrganized = useMemo(() => {
     const myId = me?.id;
@@ -288,7 +326,17 @@ export default function MapPage() {
       <OrganizerPanel myEvents={myOrganized} onShowLocation={(ev) => focusOnEvent(ev)} />
 
       {/* BOTTOM: Dock */}
-      <DragDock onDragStart={handleDragStart} onRecenter={recenterToMe} />
+      <DragDock
+        onDragStart={handleDragStart}
+        onRecenter={recenterToMe}
+        sports={SPORTS_FALLBACK}
+        sportFilter={sportFilter}
+        levelFrom={levelFromFilter}
+        levelTo={levelToFilter}
+        onSportFilterChange={setSportFilter}
+        onLevelFromChange={setLevelFromFilter}
+        onLevelToChange={setLevelToFilter}
+      />
 
       {/* Контекстное меню (ПКМ) */}
       {ctxMenu && (

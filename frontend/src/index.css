@@ -2,3 +2,23 @@
 
 /* --- layout root --- */
 html, body, #root { height: 100%; margin: 0; }
+
+/* --- SportLink wordmark (header logo) --- */
+@keyframes sportlink-wordmark-glow {
+  0%, 100% {
+    transform: translateY(0);
+    text-shadow: 0 0 0 rgba(0,0,0,0);
+  }
+  50% {
+    transform: translateY(-1px);
+    text-shadow: 0 8px 22px rgba(59,130,246,0.35);
+  }
+}
+
+.sportlink-wordmark {
+  animation: sportlink-wordmark-glow 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sportlink-wordmark { animation: none; }
+}

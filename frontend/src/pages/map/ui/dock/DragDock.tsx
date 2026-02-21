@@ -1,11 +1,28 @@
 import React from "react";
+import type { SportItem } from "@/shared/lib/sport";
+
+type LevelVal = number | "";
 
 export function DragDock({
   onDragStart,
   onRecenter,
+  sports,
+  sportFilter,
+  levelFrom,
+  levelTo,
+  onSportFilterChange,
+  onLevelFromChange,
+  onLevelToChange,
 }: {
   onDragStart: (e: React.DragEvent, kind: "EVENT" | "TRAINING") => void;
   onRecenter: () => void;
+  sports: SportItem[];
+  sportFilter: string;
+  levelFrom: LevelVal;
+  levelTo: LevelVal;
+  onSportFilterChange: (code: string) => void;
+  onLevelFromChange: (lvl: LevelVal) => void;
+  onLevelToChange: (lvl: LevelVal) => void;
 }) {
   const CircleBtn = ({
     label,
@@ -53,8 +70,10 @@ export function DragDock({
     </div>
   );
 
+  const anyFilterOn = sportFilter || levelFrom !== "" || levelTo !== "";
+
   return (
-    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 rounded-2xl border bg-white/95 px-3 py-2 shadow-xl backdrop-blur">
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 w-[720px] max-w-[96vw] rounded-2xl border bg-white/95 px-3 py-2 shadow-xl backdrop-blur">
       <div className="flex items-end gap-4">
         <CircleBtn
           label="E"
@@ -81,6 +100,77 @@ export function DragDock({
             <path d="M12 2l7 19-7-4-7 4 7-19z" />
           </svg>
         </CircleIconBtn>
+      </div>
+
+      {/* filters */}
+      <div className="mt-2 border-t pt-2">
+        <div className="mb-1 text-[11px] font-semibold text-gray-700">Фильтры карты</div>
+
+        <div className="space-y-2">
+          <select
+            className="w-full rounded-md border px-2 py-2 text-xs"
+            value={sportFilter}
+            onChange={(e) => onSportFilterChange(e.target.value)}
+            title="Фильтр по виду спорта"
+          >
+            <option value="">Все виды спорта</option>
+            {(sports || []).map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              className="w-full rounded-md border px-2 py-2 text-xs"
+              value={String(levelFrom)}
+              onChange={(e) => {
+                const v = e.target.value;
+                onLevelFromChange(v ? Number(v) : "");
+              }}
+              title="Уровень от"
+            >
+              <option value="">Уровень от (любой)</option>
+              <option value="1">Новичок</option>
+              <option value="2">Любитель</option>
+              <option value="3">Уверенный</option>
+              <option value="4">Продвинутый</option>
+              <option value="5">Профи</option>
+            </select>
+
+            <select
+              className="w-full rounded-md border px-2 py-2 text-xs"
+              value={String(levelTo)}
+              onChange={(e) => {
+                const v = e.target.value;
+                onLevelToChange(v ? Number(v) : "");
+              }}
+              title="Уровень до"
+            >
+              <option value="">Уровень до (любой)</option>
+              <option value="1">Новичок</option>
+              <option value="2">Любитель</option>
+              <option value="3">Уверенный</option>
+              <option value="4">Продвинутый</option>
+              <option value="5">Профи</option>
+            </select>
+          </div>
+
+          {anyFilterOn && (
+            <button
+              className="w-full rounded-md border px-2 py-2 text-xs hover:bg-gray-50"
+              onClick={() => {
+                onSportFilterChange("");
+                onLevelFromChange("");
+                onLevelToChange("");
+              }}
+              title="Сбросить фильтры"
+            >
+              Сбросить фильтры
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

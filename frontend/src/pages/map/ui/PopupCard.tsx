@@ -50,17 +50,9 @@ export function PopupCard({
   // Управление (после запуска) — только для событий. Для тренировок на попапе оставляем удаление.
   const canManage = isOrganizer && kind === "EVENT" && !!e.launchedAt;
 
-  // Удаление (удобно пользователю): пока событие не запущено и время начала ещё не наступило.
-  // Бэк дополнительно защитит от неверных состояний.
+  // Удаление: пока событие не запущено вручную (launchedAt=null). Бэк дополнительно валидирует состояние.
   const st = String((e as any).status || "").toUpperCase();
-  const startsOk = Number.isFinite(startsAtMs);
-
-  const canDelete =
-    isOrganizer &&
-    !e.launchedAt &&                      // не запущено вручную
-    startsOk &&
-    nowMs < startsAtMs &&                 // до начала по расписанию
-    ["DRAFT", "PUBLISHED", "CANCELLED"].includes(st);
+  const canDelete = isOrganizer && !e.launchedAt && !["STARTED", "FINISHED"].includes(st);
 
 
 
@@ -76,11 +68,9 @@ export function PopupCard({
     ? "Только организатор может удалить"
     : e.launchedAt
       ? "Нельзя удалить после запуска"
-      : !Number.isFinite(startsAtMs)
-        ? "Нельзя удалить: неизвестное время начала"
-        : nowMs >= startsAtMs
-          ? "Нельзя удалить после начала"
-          : "Удалить событие (доступно только до начала и до запуска)";
+      : ["STARTED", "FINISHED"].includes(st)
+        ? "Нельзя удалить после запуска/завершения"
+        : "Удалить событие";
 
 
   const deleteLabel = kind === "TRAINING" ? "Удалить тренировку" : "Удалить событие";

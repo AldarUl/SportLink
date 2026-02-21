@@ -127,16 +127,10 @@ export function MyTrainingsPanel({
           const isOrganizer = meId && orgId && String(orgId).toLowerCase() === String(meId).toLowerCase();
           const canWithdraw =
             !isOrganizer && (a.status === "PENDING" || a.status === "CONFIRMED" || a.status === "WAITLISTED");
-          const nowMs = Date.now();
-          const startsAtTs = e.startsAt ? new Date(e.startsAt).getTime() : NaN;
           const st = String(e.status || "").toUpperCase();
 
-          const canDeleteEvent =
-            isOrganizer &&
-            !e.launchedAt &&
-            Number.isFinite(startsAtTs) &&
-            nowMs < startsAtTs &&
-            ["DRAFT", "PUBLISHED", "CANCELLED"].includes(st);
+          // Ручной старт: бэк разрешает удаление, пока событие не запущено (launchedAt=null) и не STARTED/FINISHED
+          const canDeleteEvent = isOrganizer && !e.launchedAt && !["STARTED", "FINISHED"].includes(st);
           const canShowLocation = Boolean(onShowLocation && e.locationLat != null && e.locationLon != null);
 
           return (
@@ -146,7 +140,11 @@ export function MyTrainingsPanel({
                   <div className="flex items-center gap-2">
                     <div className="text-sm font-semibold leading-snug">{e.title || "Без названия"}</div>
                     {outcome && (
-                      <span className="rounded bg-gray-900 px-2 py-0.5 text-[10px] font-bold tracking-wide text-white">
+                      <span
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold tracking-wide text-white ${
+                          outcome === "ОТМЕНЕНО" ? "bg-red-600" : "bg-gray-900"
+                        }`}
+                      >
                         {outcome}
                       </span>
                     )}
@@ -157,7 +155,7 @@ export function MyTrainingsPanel({
                     {showStatus ? ` · ${s}` : ""}
                   </div>
                 </div>
-                <StatusBadge s={a.status} />
+                {a.status !== "CONFIRMED" && <StatusBadge s={a.status} />}
 </div>
 
               <div className="space-y-1 text-xs">
@@ -178,22 +176,26 @@ export function MyTrainingsPanel({
               </div>
 
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                <button
-                  className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                  onClick={() => openRoute({ lat: e.locationLat, lon: e.locationLon })}
-                  disabled={!e.locationLat || !e.locationLon || !myPos}
-                >
-                  Маршрут
-                </button>
+                {!pastEv && (
+                  <>
+                    <button
+                      className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                      onClick={() => openRoute({ lat: e.locationLat, lon: e.locationLon })}
+                      disabled={!e.locationLat || !e.locationLon || !myPos}
+                    >
+                      Маршрут
+                    </button>
 
-                {canShowLocation && (
-                  <button
-                    className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                    onClick={() => onShowLocation?.(e)}
-                    title="Показать место на карте"
-                  >
-                    Показать
-                  </button>
+                    {canShowLocation && (
+                      <button
+                        className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                        onClick={() => onShowLocation?.(e)}
+                        title="Показать место на карте"
+                      >
+                        Показать
+                      </button>
+                    )}
+                  </>
                 )}
 
                 <Link to={`/event/${e.id}`} className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50">
@@ -224,7 +226,8 @@ export function MyTrainingsPanel({
                     className="ml-auto rounded-lg bg-red-50 px-2 py-1 text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
                     onClick={() => onDeleteEvent(e.id)}
                     disabled={!!deleting[e.id] || !canDeleteEvent}
-                    title={canDeleteEvent ? "Удалить событие" : "Удаление доступно только до начала и до запуска"}                  >
+                    title={canDeleteEvent ? "Удалить событие" : "Нельзя удалить после запуска/завершения"}
+                  >
                     {deleting[e.id] ? "Удаление..." : "Удалить"}
                   </button>
                 ) : (

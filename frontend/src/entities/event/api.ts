@@ -85,6 +85,8 @@ export async function createEvent(payload: {
   registrationDeadline?: string;
   locationLat?: number;
   locationLon?: number;
+  levelMin?: number | null;
+  levelMax?: number | null;
 }): Promise<Event> {
   const { data } = await http.post("/event", {
     ...payload,
