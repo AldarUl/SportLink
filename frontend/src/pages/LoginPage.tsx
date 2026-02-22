@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { login, fetchMe } from "@/features/auth/api";
 import { useNavigate, Link } from "react-router-dom";
 

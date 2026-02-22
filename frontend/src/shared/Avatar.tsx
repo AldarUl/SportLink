@@ -1,5 +1,3 @@
-import React from "react";
-
 function initialsSeed(name?: string | null, email?: string | null) {
   const s = (name && name.trim()) || (email && email.trim()) || "user";
   return encodeURIComponent(s);

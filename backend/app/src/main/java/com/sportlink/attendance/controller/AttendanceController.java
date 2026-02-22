@@ -54,4 +54,10 @@ public class AttendanceController {
                                      Authentication auth) {
         return attendanceService.markMe(eventId, me(auth), status);
     }
+
+    // participant/organizer: list who can be rated (after organizer marked attendance)
+    @GetMapping("/rateable")
+    public List<UUID> rateable(@PathVariable UUID eventId, Authentication auth) {
+        return attendanceService.rateable(eventId, me(auth));
+    }
 }

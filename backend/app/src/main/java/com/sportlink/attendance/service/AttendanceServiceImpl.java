@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 
@@ -95,6 +97,47 @@ public class AttendanceServiceImpl implements AttendanceService {
             throw new org.springframework.security.access.AccessDeniedException("Only organizer can view attendance list");
         }
         return attendanceRepo.findByEventId(eventId).stream().map(this::toDto).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> rateable(UUID eventId, UUID requesterId) {
+        var e = eventRepo.findById(eventId).orElseThrow(() -> new EntityNotFoundException("Event not found"));
+        UUID organizerId = e.getOrganizerId();
+
+        boolean requesterIsOrganizer = organizerId.equals(requesterId);
+        if (!requesterIsOrganizer) {
+            boolean confirmed = appRepo.existsByEventIdAndUserIdAndStatus(eventId, requesterId, ApplicationStatus.CONFIRMED);
+            if (!confirmed) {
+                throw new org.springframework.security.access.AccessDeniedException("Only confirmed participants can view rateable list");
+            }
+
+            // ❗участник получает список только после того, как организатор отметил его как ATTENDED
+            var my = attendanceRepo.findByEventIdAndUserId(eventId, requesterId).orElse(null);
+            boolean markedByOrganizer = my != null
+                    && my.getStatus() == AttendanceStatus.ATTENDED
+                    && organizerId.equals(my.getMarkedBy());
+
+            if (!markedByOrganizer) {
+                return List.of();
+            }
+        }
+
+        // Берём только тех, кого организатор отметил как ATTENDED
+        var attended = attendanceRepo.findByEventIdAndStatusAndMarkedBy(eventId, AttendanceStatus.ATTENDED, organizerId);
+
+        LinkedHashSet<UUID> ids = new LinkedHashSet<>();
+        // сначала те, кто реально пришёл
+        for (var a : attended) {
+            ids.add(a.getUserId());
+        }
+        // организатора можно оценить тоже (но только если requester прошёл проверку выше)
+        ids.add(organizerId);
+
+        // себя оценивать нельзя
+        ids.remove(requesterId);
+
+        return new ArrayList<>(ids);
     }
 
     private AttendanceResponse toDto(Attendance a) {

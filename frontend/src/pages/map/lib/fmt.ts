@@ -3,7 +3,14 @@ import type { LngLat } from "./geo";
 export function formatDateTime(iso?: string) {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleString();
+  // Без секунд (в UI лишний шум)
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export function openRouteExternal(from?: LngLat, to?: LngLat) {

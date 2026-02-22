@@ -10,6 +10,8 @@ export type Event = {
   sport: string;
   description?: string | null;
   startsAt: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   durationMin: number;
   capacity?: number;
   waitlistEnabled?: boolean;

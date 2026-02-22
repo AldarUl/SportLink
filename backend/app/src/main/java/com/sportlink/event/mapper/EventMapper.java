@@ -62,7 +62,11 @@ public class EventMapper {
      * STARTED возможен только после ручного запуска (launchedAt != null).
      */
     private EventStatus resolveLiveStatus(Event e, OffsetDateTime now) {
+        // Явные статусы из БД имеют приоритет.
+        // Важно: ручное завершение должно сразу отражаться в UI,
+        // даже если (launchedAt + durationMin) ещё "не прошло".
         if (e.getStatus() == EventStatus.CANCELLED) return EventStatus.CANCELLED;
+        if (e.getStatus() == EventStatus.FINISHED) return EventStatus.FINISHED;
 
         // Если не запускали вручную — событие остаётся PUBLISHED (даже если startsAt уже прошёл).
         if (e.getLaunchedAt() == null) {
@@ -72,6 +76,7 @@ public class EventMapper {
         }
 
         // После ручного запуска STARTED/FINISHED считаем по launchedAt + durationMin.
+        // Если статус в БД STARTED — можем показать FINISHED по времени ещё до шедулера.
         var dur = e.getDurationMin();
         if (dur == null) return EventStatus.STARTED;
 

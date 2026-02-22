@@ -11,8 +11,6 @@ import { formatTimeLeft, humanizeStart, isEventPast } from "../lib/time";
 import { sportLabel } from "@/shared/lib/sport";
 import { StatusBadge } from "../ui/atoms/StatusBadge";
 
-import { eventLifecycleBadge } from "@/shared/lib/eventLifecycle"; 
-
 /* ===================== LEFT: Мои ближайшие тренировки ===================== */
 
 export function MyTrainingsPanel({
@@ -121,7 +119,8 @@ export function MyTrainingsPanel({
           const orgId = e.organizerId || e.organizer?.id;
           const pastEv = isEventPast(e);
           const s = String(e.status || "").toUpperCase();
-          const showStatus = s && s !== "PUBLISHED";
+          // FINISHED/CANCELLED уже показываем отдельной плашкой, поэтому не дублируем текстом
+          const showStatus = s && !["PUBLISHED", "FINISHED", "CANCELLED"].includes(s);
           const outcome = pastEv ? (s === "CANCELLED" ? "ОТМЕНЕНО" : (s === "FINISHED" || e.launchedAt ? "ЗАВЕРШЕНО" : "ОТМЕНЕНО")) : null;
 
           const isOrganizer = meId && orgId && String(orgId).toLowerCase() === String(meId).toLowerCase();

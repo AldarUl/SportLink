@@ -30,20 +30,9 @@ function normEvent(e: any): Event {
     status: e.status ?? "PUBLISHED",
     locationLat: e.locationLat ?? e.lat ?? e.location?.lat ?? null,
     locationLon: e.locationLon ?? e.lon ?? e.location?.lon ?? null,
-    createdAt: e.createdAt ?? null,
-    updatedAt: e.updatedAt ?? null,
   };
 }
 
-
-async function fetchEventById(id: string): Promise<Event | null> {
-  try {
-    const { data } = await http.get(`/event/${id}`);
-    return normEvent(data);
-  } catch {
-    return null;
-  }
-}
 
 type AppWithEvent = Application & { event?: Event | null };
 

@@ -24,6 +24,8 @@ import { MyTrainingsPanel } from "./panels/MyTrainingsPanel";
 import { OrganizerPanel } from "./panels/OrganizerPanel";
 
 import { SPORTS_FALLBACK, normalizeSportCode } from "@/shared/lib/sport";
+import { useMySkillsStore } from "@/features/skills/store";
+import { checkLevelEligibility } from "@/shared/lib/eligibility";
 
 import "./styles/mapPins.css";
 
@@ -83,7 +85,7 @@ export default function MapPage() {
   const { zoomRef, onMapUpdate } = useViewport();
   const { handleBounds } = useViewportFetch(zoomRef, () => Infinity);
 
-  const { mine, loadMine, handleApply, withdrawByEvent, findByEventId } = useApplyWithOverlap();
+  const { mine, loadMine, withdrawByEvent } = useApplyWithOverlap();
   useEffect(() => {
     if (isAuthed) loadMine();
   }, [isAuthed, loadMine]);
@@ -119,8 +121,21 @@ export default function MapPage() {
 
   // client-side filters for map markers
   const [sportFilter, setSportFilter] = useState<string>("");
+  const [kindFilter, setKindFilter] = useState<"" | "EVENT" | "TRAINING">("");
   const [levelFromFilter, setLevelFromFilter] = useState<number | "">("");
   const [levelToFilter, setLevelToFilter] = useState<number | "">("");
+
+  // skills (для подсветки маркеров и проверки уровня)
+  const mySkills = useMySkillsStore((s) => s.skills);
+  const skillsLoaded = useMySkillsStore((s) => s.loaded);
+  const loadMySkills = useMySkillsStore((s) => s.load);
+  useEffect(() => {
+    if (!isAuthed) {
+      useMySkillsStore.getState().clear();
+      return;
+    }
+    if (!skillsLoaded) loadMySkills().catch(() => {});
+  }, [isAuthed, skillsLoaded, loadMySkills]);
 
   const lastBoundsRef = useRef<YBounds | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -130,13 +145,6 @@ export default function MapPage() {
   const [dragPreview, setDragPreview] = useState<DragPreview>(null);
   const [createState, setCreateState] = useState<{ kind: "EVENT" | "TRAINING"; coords: LngLat } | null>(null);
 
-  const onApplySafe = async (ev: AppEvent) => {
-    if (!isAuthed) {
-      navigate("/auth/login");
-      return;
-    }
-    await handleApply(ev);
-  };
   const onWithdrawSafe = async (id: string) => {
     if (!isAuthed) {
       navigate("/auth/login");
@@ -212,11 +220,15 @@ export default function MapPage() {
       setSelected(null);
       return;
     }
+    if (kindFilter && String(ev.kind || "EVENT").toUpperCase() !== kindFilter) {
+      setSelected(null);
+      return;
+    }
     if (!passesLevelRangeFilter(ev, levelFromFilter, levelToFilter)) {
       setSelected(null);
       return;
     }
-  }, [allEvents, selected, sportFilter, levelFromFilter, levelToFilter]);
+  }, [allEvents, selected, sportFilter, kindFilter, levelFromFilter, levelToFilter]);
 
   const markers = useMemo(() => {
     const base = (allEvents as AppEvent[])
@@ -225,10 +237,25 @@ export default function MapPage() {
 
     return base.filter((e) => {
       if (sportFilter && normalizeSportCode(e.sport) !== sportFilter) return false;
+      if (kindFilter && String(e.kind || "EVENT").toUpperCase() !== kindFilter) return false;
       if (!passesLevelRangeFilter(e, levelFromFilter, levelToFilter)) return false;
       return true;
     });
-  }, [allEvents, nowMs, sportFilter, levelFromFilter, levelToFilter]);
+  }, [allEvents, nowMs, sportFilter, kindFilter, levelFromFilter, levelToFilter]);
+
+  // защита: levelFrom не может быть выше levelTo
+  const onLevelFromSafe = (lvl: number | "") => {
+    setLevelFromFilter(lvl);
+    if (lvl !== "" && levelToFilter !== "" && Number(lvl) > Number(levelToFilter)) {
+      setLevelToFilter(lvl);
+    }
+  };
+  const onLevelToSafe = (lvl: number | "") => {
+    setLevelToFilter(lvl);
+    if (lvl !== "" && levelFromFilter !== "" && Number(lvl) < Number(levelFromFilter)) {
+      setLevelFromFilter(lvl);
+    }
+  };
 
   const myOrganized = useMemo(() => {
     const myId = me?.id;
@@ -331,11 +358,13 @@ export default function MapPage() {
         onRecenter={recenterToMe}
         sports={SPORTS_FALLBACK}
         sportFilter={sportFilter}
+        kindFilter={kindFilter}
         levelFrom={levelFromFilter}
         levelTo={levelToFilter}
         onSportFilterChange={setSportFilter}
-        onLevelFromChange={setLevelFromFilter}
-        onLevelToChange={setLevelToFilter}
+        onKindFilterChange={setKindFilter}
+        onLevelFromChange={onLevelFromSafe}
+        onLevelToChange={onLevelToSafe}
       />
 
       {/* Контекстное меню (ПКМ) */}
@@ -411,7 +440,6 @@ export default function MapPage() {
         {markers.map((e) => {
           const coords: LngLat = [e.locationLon as number, e.locationLat as number];
           const isTraining = (e.kind || "EVENT").toUpperCase() === "TRAINING";
-          const hasApp = isAuthed && Boolean(findByEventId(e.id));
           const active = selected?.e.id === e.id;
 
           const commonProps = {
@@ -419,21 +447,33 @@ export default function MapPage() {
             e,
             coords,
             active,
-            hasApp,
             pressedId,
             setPressedId: (id: string | null) => setPressedId(id),
             onOpen: (ev: AppEvent, c: LngLat) => setSelected({ e: ev, coords: c }),
-            onApply: onApplySafe,
-            onWithdraw: onWithdrawSafe,
             onMore: () => navigate(`/event/${e.id}`),
             myPos,
             onClose: () => setSelected(null),
           };
 
+          // подсветка «уровень не подходит» (только для авторизованного)
+          const lvlCheck = isAuthed && skillsLoaded ? checkLevelEligibility(e as any, mySkills) : { ok: true };
+          const levelMismatch = isAuthed && skillsLoaded ? !lvlCheck.ok : false;
+          const levelMismatchHint = (lvlCheck as any).message as string | undefined;
+
           return isTraining ? (
-            <TrainingMarker key={String(e.id).toLowerCase()} {...(commonProps as any)} />
+            <TrainingMarker
+              key={String(e.id).toLowerCase()}
+              {...(commonProps as any)}
+              levelMismatch={levelMismatch}
+              levelMismatchHint={levelMismatchHint}
+            />
           ) : (
-            <EventMarker key={String(e.id).toLowerCase()} {...(commonProps as any)} />
+            <EventMarker
+              key={String(e.id).toLowerCase()}
+              {...(commonProps as any)}
+              levelMismatch={levelMismatch}
+              levelMismatchHint={levelMismatchHint}
+            />
           );
         })}
       </YMap>

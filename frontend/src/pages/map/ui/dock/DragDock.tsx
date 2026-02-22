@@ -35,7 +35,7 @@ export function DragDock({
     bg: string;
     onDragStart: any;
   }) => (
-    <div className="flex w-[96px] flex-col items-center">
+    <div className="flex w-[88px] flex-col items-center">
       <button
         draggable
         onDragStart={onDragStart}
@@ -44,7 +44,7 @@ export function DragDock({
       >
         {label}
       </button>
-      <div className="mt-1 text-center text-[11px] text-gray-700">{sub}</div>
+      <div className="mt-1 text-center text-[11px] text-gray-700 leading-tight">{sub}</div>
     </div>
   );
 
@@ -57,7 +57,7 @@ export function DragDock({
     onClick: () => void;
     children: React.ReactNode;
   }) => (
-    <div className="flex w-[96px] flex-col items-center">
+    <div className="flex w-[88px] flex-col items-center">
       <button
         onClick={onClick}
         title={title}
@@ -66,29 +66,31 @@ export function DragDock({
       >
         {children}
       </button>
-      <div className="mt-1 text-center text-[11px] text-gray-700">{title}</div>
+      <div className="mt-1 text-center text-[11px] text-gray-700 leading-tight">{title}</div>
     </div>
   );
 
   const anyFilterOn = sportFilter || levelFrom !== "" || levelTo !== "";
 
   return (
-    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 w-[720px] max-w-[96vw] rounded-2xl border bg-white/95 px-3 py-2 shadow-xl backdrop-blur">
-      <div className="flex items-end gap-4">
+    // Было: w-[720px] => из-за этого "белый блок" занимал половину карты
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 w-[420px] max-w-[94vw] rounded-2xl border bg-white/95 px-2 py-2 shadow-xl backdrop-blur">
+      {/* Центрируем весь верхний ряд */}
+      <div className="flex items-end justify-center gap-3">
         <CircleBtn
           label="E"
-          sub="Создать событие (drag)"
+          sub="Событие"
           bg="bg-amber-500"
           onDragStart={(e: any) => onDragStart(e, "EVENT")}
         />
         <CircleBtn
           label="T"
-          sub="Создать тренировку (drag)"
+          sub="Тренировка"
           bg="bg-blue-600"
           onDragStart={(e: any) => onDragStart(e, "TRAINING")}
         />
 
-        <div className="ml-2 h-10 w-px bg-gray-200" />
+        <div className="mx-1 h-10 w-px bg-gray-200" />
 
         <CircleIconBtn title="Моё место" onClick={onRecenter}>
           <svg

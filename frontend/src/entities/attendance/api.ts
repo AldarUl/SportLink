@@ -8,6 +8,7 @@ import type { AttendanceResponse, AttendanceStatus } from "./types";
 // POST /api/v1/event/{eventId}/attendance/me?status=...
 // POST /api/v1/event/{eventId}/attendance   (body: { userId, status })
 // GET  /api/v1/event/{eventId}/attendance   (organizer only)
+// GET  /api/v1/event/{eventId}/attendance/rateable (organizer or participant after organizer marked attendance)
 
 export const getMyAttendance = async (eventId: string): Promise<AttendanceResponse> => {
   const res = await http.get(`/event/${eventId}/attendance/me`);
@@ -35,5 +36,10 @@ export const setAttendanceForUser = async (
 
 export const listAttendance = async (eventId: string): Promise<AttendanceResponse[]> => {
   const res = await http.get(`/event/${eventId}/attendance`);
+  return res.data;
+};
+
+export const listRateableUserIds = async (eventId: string): Promise<string[]> => {
+  const res = await http.get(`/event/${eventId}/attendance/rateable`);
   return res.data;
 };

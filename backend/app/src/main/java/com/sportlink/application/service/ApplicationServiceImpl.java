@@ -44,12 +44,12 @@ public class ApplicationServiceImpl implements ApplicationService {
         Event e = eventRepo.lockById(eventId)
                 .orElseThrow(() -> new EntityNotFoundException("Event not found"));
 
-        var now = OffsetDateTime.now(); // можно оставить так; хочешь — сделай now(ZoneOffset.UTC)
+        var now = OffsetDateTime.now();
 
         // базовые валидаторы
-        if (e.getStartsAt().isBefore(now)) {
-            throw new IllegalStateException("Event already started");
-        }
+        // Ручной старт: событие считается "начавшимся" только после launch (launchedAt != null / status STARTED).
+        // НЕЛЬЗЯ запрещать запись по startsAt, иначе при рассинхроне таймзон/часов запись блокируется заранее.
+        requireNotLaunched(e);
         if (e.getRegistrationDeadline() != null && !now.isBefore(e.getRegistrationDeadline())) {
             throw new IllegalStateException("Registration is closed");
         }
@@ -138,10 +138,8 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         requireOrganizer(e, organizerId);
 
-        var now = OffsetDateTime.now();
-        if (e.getStartsAt().isBefore(now)) {
-            throw new IllegalStateException("Event already started");
-        }
+        // Ручной старт: подтверждать/отклонять заявки нельзя после запуска.
+        requireNotLaunched(e);
 
         // Идемпотентность
         if (a.getStatus() == ApplicationStatus.CONFIRMED) {
@@ -176,10 +174,8 @@ public class ApplicationServiceImpl implements ApplicationService {
 
         requireOrganizer(e, organizerId);
 
-        var now = OffsetDateTime.now();
-        if (e.getStartsAt().isBefore(now)) {
-            throw new IllegalStateException("Event already started");
-        }
+        // Ручной старт: подтверждать/отклонять заявки нельзя после запуска.
+        requireNotLaunched(e);
 
         if (a.getStatus() == ApplicationStatus.DECLINED) {
             return toDto(a);
@@ -323,6 +319,21 @@ public class ApplicationServiceImpl implements ApplicationService {
     private void requireOrganizer(Event e, UUID organizerId) {
         if (!e.getOrganizerId().equals(organizerId)) {
             throw new IllegalArgumentException("Only organizer can manage applications");
+        }
+    }
+
+    /**
+     * Ручной старт.
+     * Запись/подтверждение/отклонение заявок запрещаем ТОЛЬКО если событие реально запущено (launchedAt != null)
+     * или уже находится в статусе STARTED/FINISHED/CANCELLED.
+     */
+    private void requireNotLaunched(Event e) {
+        if (e.getStatus() == EventStatus.CANCELLED || e.getStatus() == EventStatus.FINISHED) {
+            throw new IllegalStateException("Event is not available");
+        }
+        if (e.getLaunchedAt() != null || e.getStatus() == EventStatus.STARTED) {
+            // Это сообщение ожидается фронтом (маппится в понятный текст)
+            throw new IllegalStateException("Event already started");
         }
     }
 

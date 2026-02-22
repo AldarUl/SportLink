@@ -2,6 +2,7 @@
 import { Outlet, Link } from "react-router-dom";
 import { useAuthStore } from "@/features/auth/store";
 import { logout } from "@/features/auth/api";
+import { ToastViewport } from "@/shared/ui/toast";
 
 export default function Layout() {
   const { user } = useAuthStore();
@@ -15,7 +16,7 @@ export default function Layout() {
           {user ? (
             <>
               <Link to="/profile" className="rounded-full border px-3 py-1">
-                {user.name?.split(" ")[0] || user.email}
+                {user.displayName?.split(" ")[0] || user.email}
               </Link>
               <button
                 onClick={() => logout()}
@@ -38,6 +39,9 @@ export default function Layout() {
       <main className="flex-1">
         <Outlet />
       </main>
+
+      {/* global toasts */}
+      <ToastViewport />
     </div>
   );
 }

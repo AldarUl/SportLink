@@ -81,7 +81,9 @@ async function getFreshToken(): Promise<string> {
 http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
   const token = getAccessToken();
   if (token) {
-    cfg.headers = { ...(cfg.headers || {}), Authorization: `Bearer ${token}` };
+    // Axios v1 типизирует headers как AxiosHeaders, поэтому безопаснее мутировать
+    cfg.headers = (cfg.headers ?? {}) as any;
+    (cfg.headers as any).Authorization = `Bearer ${token}`;
   }
   return cfg;
 });

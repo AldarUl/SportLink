@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from "react";
 import type { Event as AppEvent } from "@/entities/event/types";
 import { useApplicationStore } from "@/entities/application/store";
+import { toast } from "@/shared/ui/toast";
+import { getApiErrorMessage } from "@/shared/lib/apiError";
 
 export default function ApplyWithdrawButton({
   event,
@@ -34,6 +36,8 @@ console.debug("ApplyBtn", {
       setBusy("apply");
       await apply(event);
       onAfterChange?.();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Не удалось записаться"));
     } finally {
       setBusy(null);
     }
@@ -44,6 +48,8 @@ console.debug("ApplyBtn", {
       setBusy("withdraw");
       await withdrawByEvent(event.id);
       onAfterChange?.();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Не удалось отозвать заявку"));
     } finally {
       setBusy(null);
     }

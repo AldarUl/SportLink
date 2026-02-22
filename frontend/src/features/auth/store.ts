@@ -33,9 +33,13 @@ function load(): Tokens {
 
 export const useAuthStore = create<AuthState>((set) => ({
   // стартовые токены: берём из LS если есть
-  accessToken: null,
-  refreshToken: null,
-  ...load(),
+  ...(() => {
+    const t = load();
+    return {
+      accessToken: t.accessToken ?? null,
+      refreshToken: t.refreshToken ?? null,
+    };
+  })(),
 
   user: null,
 

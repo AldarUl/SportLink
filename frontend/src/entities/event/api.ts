@@ -197,6 +197,6 @@ export async function listMyOrganizedEvents(options?: { futureOnly?: boolean; pa
 }
 
 export async function finishEvent(id: string) {
-  const { data } = await api.patch(`/api/v1/event/${id}/finish`);
-  return data;
+  const { data } = await http.patch(`/event/${id}/finish`);
+  return toEvent(data);
 }

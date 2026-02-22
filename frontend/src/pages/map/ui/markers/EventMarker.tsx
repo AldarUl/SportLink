@@ -36,6 +36,11 @@ export function EventMarker({
   myPos?: LngLat | null;
   onClose: () => void;
 }) {
+  const lvlMinRaw = (e as any).levelMin;
+  const lvlMin = typeof lvlMinRaw === "number" && Number.isFinite(lvlMinRaw)
+    ? Math.max(1, Math.min(5, Math.round(lvlMinRaw)))
+    : null;
+
   const title = e.title;
   const subtitle = `Событие • ${sportLabel(e.sport) ?? ""} • ${formatDateTime(e.startsAt)}`;
   const PIN = 52, TAIL = 12, HALO = 12;
@@ -81,6 +86,7 @@ export function EventMarker({
         >
           {active && <span className="sl-shine" />}
           <span className="sl-band" />
+          {lvlMin && <span className="sl-lvl sl-lvl--event" aria-hidden="true">{lvlMin}</span>}
         </div>
 
         {/* мини-бейдж */}

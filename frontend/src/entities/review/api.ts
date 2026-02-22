@@ -10,3 +10,9 @@ export async function listReviewsByEvent(eventId: string, targetId: string, page
   const { data } = await http.get(`/review/by-event/${eventId}`, { params: { targetId, page, size } });
   return data;
 }
+
+// Все отзывы по событию (без фильтра targetId) — удобно, чтобы понять, кто уже оценил кого.
+export async function listReviewsByEventAll(eventId: string, page = 0, size = 200): Promise<ReviewPage> {
+  const { data } = await http.get(`/review/by-event/${eventId}`, { params: { page, size } });
+  return data;
+}

@@ -10,6 +10,22 @@ import { useEventStore } from "@/entities/event/store";
 import { useNavigate } from "react-router-dom";
 import { getApiErrorMessage } from "@/shared/lib/apiError";
 
+function humanizeDiffMs(diffMs: number) {
+  const abs = Math.abs(diffMs);
+  const totalMin = Math.floor(abs / 60000);
+
+  const days = Math.floor(totalMin / (60 * 24));
+  const hours = Math.floor((totalMin - days * 24 * 60) / 60);
+  const mins = totalMin - days * 24 * 60 - hours * 60;
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} д`);
+  if (hours > 0) parts.push(`${hours} ч`);
+  if (mins > 0 || parts.length === 0) parts.push(`${mins} мин`);
+
+  return parts.join(" ");
+}
+
 export function PopupCard({
   e,
   myPos,
@@ -35,6 +51,15 @@ export function PopupCard({
 
   const startsAtMs = Date.parse(e.startsAt);
   const nowMs = Date.now();
+  const diffToStartMs = startsAtMs - nowMs;
+
+  const startsInLine =
+    Number.isFinite(startsAtMs) && diffToStartMs > 0
+      ? `Начнётся через ${humanizeDiffMs(diffToStartMs)}`
+      : Number.isFinite(startsAtMs) && diffToStartMs <= 0
+        ? `Время начала уже наступило`
+        : "";
+
   const launchOpenMs = startsAtMs - 5 * 60 * 1000;
   const launchCloseMs = startsAtMs + 15 * 60 * 1000;
   const tooEarly = nowMs < launchOpenMs;
@@ -54,10 +79,6 @@ export function PopupCard({
   const st = String((e as any).status || "").toUpperCase();
   const canDelete = isOrganizer && !e.launchedAt && !["STARTED", "FINISHED"].includes(st);
 
-
-
-
-
   const launchTitle = tooEarly
     ? "Запуск доступен за 5 минут до начала"
     : tooLate
@@ -71,7 +92,6 @@ export function PopupCard({
       : ["STARTED", "FINISHED"].includes(st)
         ? "Нельзя удалить после запуска/завершения"
         : "Удалить событие";
-
 
   const deleteLabel = kind === "TRAINING" ? "Удалить тренировку" : "Удалить событие";
 
@@ -89,6 +109,9 @@ export function PopupCard({
       <div className="mt-1 text-[12px] text-gray-500">
         {kindRu} • {sportLabel(e.sport) || ""} • {formatDateTime(e.startsAt)}
       </div>
+
+      {/* НОВОЕ: через сколько начнётся */}
+      {startsInLine && <div className="mt-0.5 text-[12px] text-gray-600">{startsInLine}</div>}
 
       {e.description && <div className="mt-2 text-[13px]">{e.description}</div>}
 
@@ -127,13 +150,17 @@ export function PopupCard({
             </button>
 
             {canManage ? (
-              <button className="h-10 rounded-xl bg-slate-900 text-white" onClick={() => navigate(`/event/${e.id}?manage=1#after`)}>
+              <button
+                className="h-10 rounded-xl bg-slate-900 text-white"
+                onClick={() => navigate(`/event/${e.id}?manage=1#after`)}
+              >
                 Управление
               </button>
             ) : (
               <button
                 disabled={!canDelete || busy !== null}
-                className="h-10 rounded-xl bg-red-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"                title={deleteTitle}
+                className="h-10 rounded-xl bg-red-600 text-white disabled:opacity-60 disabled:cursor-not-allowed"
+                title={deleteTitle}
                 onClick={async () => {
                   const ok = confirm(`${deleteLabel}?`);
                   if (!ok) return;
@@ -153,7 +180,9 @@ export function PopupCard({
             )}
           </div>
         ) : (
-          <div className="w-full"><ApplyWithdrawButton event={e} /></div>
+          <div className="w-full">
+            <ApplyWithdrawButton event={e} />
+          </div>
         )}
       </div>
     </div>

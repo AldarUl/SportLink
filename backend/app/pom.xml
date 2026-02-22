@@ -65,7 +65,14 @@
             <version>0.4.21</version>
         </dependency>
 
-        <!-- Tests -->
+        
+        <!-- WebP support for ImageIO (lets Thumbnailator read .webp) -->
+        <dependency>
+            <groupId>com.github.gotson</groupId>
+            <artifactId>webp-imageio</artifactId>
+            <version>0.2.0</version>
+        </dependency>
+<!-- Tests -->
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-testcontainers</artifactId><scope>test</scope></dependency>
         <dependency>

@@ -1,5 +1,5 @@
 // src/pages/RegisterPage.tsx
-import { FormEvent, useState } from "react";
+import { useState, type FormEvent } from "react";
 import { register, login, fetchMe } from "@/features/auth/api"; // ← ДОБАВИЛИ login и fetchMe
 import { Link, useNavigate } from "react-router-dom";
 

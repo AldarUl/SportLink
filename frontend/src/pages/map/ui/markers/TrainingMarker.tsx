@@ -37,6 +37,25 @@ export function TrainingMarker({
   myPos?: LngLat | null;
   onClose: () => void;
 }) {
+  const lvlMinRaw = (e as any).levelMin;
+  const lvlMin = typeof lvlMinRaw === "number" && Number.isFinite(lvlMinRaw)
+    ? Math.max(1, Math.min(5, Math.round(lvlMinRaw)))
+    : null;
+
+  const levelColor = (lvl: number) => {
+    // 1 (новичок) -> синий, 5 (профи) -> красный
+    switch (lvl) {
+      case 1: return "#2563eb"; // blue-600
+      case 2: return "#16a34a"; // green-600
+      case 3: return "#f59e0b"; // amber-500
+      case 4: return "#f97316"; // orange-500
+      case 5: return "#dc2626"; // red-600
+      default: return "#0ea5e9";
+    }
+  };
+
+  const lvlColor = lvlMin ? levelColor(lvlMin) : null;
+
   const title = e.title;
   const subtitle = `Тренировка • ${sportLabel(e.sport) ?? ""} • ${formatDateTime(e.startsAt)}`;
   const PIN = 34, TAIL = 9, HALO = 0;
@@ -54,6 +73,7 @@ export function TrainingMarker({
     transform: pressedId === e.id ? "scale(0.96)" : undefined,
     transition: pressedId === e.id ? "transform 60ms ease-out, box-shadow 80ms ease" : undefined,
     boxShadow: pressedId === e.id ? "0 0 0 3px #fff, 0 6px 14px rgba(0,0,0,.26)" : undefined,
+    ...(lvlColor ? { background: lvlColor, color: lvlColor } : null),
   };
 
   return (
@@ -74,6 +94,7 @@ export function TrainingMarker({
         >
           {active && <span className="sl-shine" />}
           <span className="sl-band" />
+          {lvlMin && <span className="sl-lvl" aria-hidden="true">{lvlMin}</span>}
         </div>
 
         {!active && (

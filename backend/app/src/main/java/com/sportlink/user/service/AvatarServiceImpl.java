@@ -1,10 +1,12 @@
 package com.sportlink.user.service;
 
 import net.coobird.thumbnailator.Thumbnails;
+import net.coobird.thumbnailator.tasks.UnsupportedFormatException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -51,16 +53,41 @@ public class AvatarServiceImpl implements AvatarService {
         // 1. Временная директория для обработки картинок
         Path tempDir = Files.createTempDirectory("avatar-" + userId);
         try {
+            if (file == null || file.isEmpty()) {
+                throw new IllegalArgumentException("Файл пустой");
+            }
+
+            // Читаем байты один раз (чтобы можно было и сохранить original, и построить превью)
+            byte[] bytes = file.getBytes();
+
+            // Имя original (с расширением, если оно есть)
+            String originalName = file.getOriginalFilename();
+            String ext = null;
+            if (originalName != null) {
+                int dot = originalName.lastIndexOf('.');
+                if (dot > -1 && dot < originalName.length() - 1) {
+                    ext = originalName.substring(dot + 1).toLowerCase();
+                    // небольшой sanity-check
+                    if (ext.length() > 8) ext = null;
+                }
+            }
+            String originalFileName = (ext != null && !ext.isBlank()) ? ("original." + ext) : "original";
+
             // ====== Готовим файлы во временной папке ======
-            Path original = tempDir.resolve("original");
-            Files.copy(file.getInputStream(), original);
+            Path original = tempDir.resolve(originalFileName);
+            Files.write(original, bytes);
 
             Path avatar = tempDir.resolve("avatar.jpg");
-            Thumbnails.of(original.toFile())
-                    .size(512, 512)
-                    .outputFormat("jpg")
-                    .outputQuality(0.9)
-                    .toFile(avatar.toFile());
+            try {
+                Thumbnails.of(new ByteArrayInputStream(bytes))
+                        .size(512, 512)
+                        .outputFormat("jpg")
+                        .outputQuality(0.9)
+                        .toFile(avatar.toFile());
+            } catch (UnsupportedFormatException ex) {
+                // Чаще всего падает на WEBP/HEIC без ImageIO-плагина
+                throw new IllegalArgumentException("Неподдерживаемый формат изображения. Загрузите JPG или PNG.");
+            }
 
             Path thumb = tempDir.resolve("avatar_128.jpg");
             Thumbnails.of(avatar.toFile())
@@ -83,7 +110,7 @@ public class AvatarServiceImpl implements AvatarService {
             ensureUserFolderExists(userId);
 
             // 2. Загрузить файлы в Nextcloud (WebDAV PUT)
-            uploadToNextcloud(userId, "original", original);
+            uploadToNextcloud(userId, originalFileName, original);
             uploadToNextcloud(userId, "avatar.jpg", avatar);
             uploadToNextcloud(userId, "avatar_128.jpg", thumb);
 

@@ -84,6 +84,9 @@ public class SecurityConfig {
 
                     auth.requestMatchers(HttpMethod.POST, "/api/v1/user").permitAll();
 
+                    // Attendance требует авторизации (хотя находится под /api/v1/event/**)
+                    auth.requestMatchers("/api/v1/event/*/attendance/**").hasRole("USER");
+
                     // Публичное чтение каталога/поиска/событий/профилей
                     auth.requestMatchers(HttpMethod.GET,
                             "/api/v1/event/**",

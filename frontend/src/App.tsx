@@ -13,6 +13,7 @@ import EventDetailPage from "@/pages/event/EventDetailPage";
 import EventEditPage from "@/pages/event/EventEditPage";
 import SkillsGate from "@/features/skills/SkillsGate";
 import ProfilePage from "@/pages/profile/ProfilePage";
+import ToastHost from "@/shared/ui/toast/ToastHost";
 
 
 function getJwtExpMs(token: string | null | undefined): number | null {
@@ -152,6 +153,7 @@ export default function App() {
     <div className="h-full flex flex-col">
       <Nav />
       <SkillsGate />
+      <ToastHost />
       <div className="flex-1 min-h-0">
         <Routes>
           <Route path="/" element={<Navigate to="/map" replace />} />

@@ -6,6 +6,7 @@ import { normalizeSportCode } from "@/shared/lib/sport";
 import { useEventStore } from "@/entities/event/store";
 import { useAuthStore } from "@/features/auth/store";
 import type { Event, EventAccess, EventAdmission } from "@/entities/event/types";
+import { LEVEL_LABEL } from "@/shared/lib/level";
 
 export default function EventEditPage() {
   const { id = "" } = useParams();
@@ -26,9 +27,8 @@ export default function EventEditPage() {
   const [description, setDescription] = useState<string>("");
   const [access, setAccess] = useState<EventAccess>("PUBLIC");
   const [admission, setAdmission] = useState<EventAdmission>("AUTO");
-  const [waitlistEnabled, setWaitlistEnabled] = useState<boolean>(false);
-  const [locationLat, setLocationLat] = useState<number | undefined>(undefined);
-  const [locationLon, setLocationLon] = useState<number | undefined>(undefined);
+  const [levelMin, setLevelMin] = useState<number>(1);
+  const [levelMax, setLevelMax] = useState<number>(5);
   const [sports, setSports] = useState<{code:string;name:string}[]>([]);
 
 
@@ -59,9 +59,10 @@ export default function EventEditPage() {
         setDescription(e.description || "");
         setAccess(e.access);
         setAdmission(e.admission);
-        setWaitlistEnabled(Boolean(e.waitlistEnabled));
-        setLocationLat(e.locationLat ?? undefined);
-        setLocationLon(e.locationLon ?? undefined);
+        const mn = e.levelMin == null ? 1 : Number(e.levelMin);
+        const mx = e.levelMax == null ? 5 : Number(e.levelMax);
+        setLevelMin(mn);
+        setLevelMax(mx);
       } catch (e: any) {
         setErr(e?.response?.data?.message || "Не удалось загрузить событие");
       } finally {
@@ -85,9 +86,8 @@ export default function EventEditPage() {
       description: description.trim() || null,
       access,
       admission,
-      waitlistEnabled,
-      locationLat,
-      locationLon,
+      levelMin,
+      levelMax,
     };
 
     const updated = await updateEvent(evt.id, patch);
@@ -159,42 +159,61 @@ export default function EventEditPage() {
           <L label="Доступ">
             <select className="w-full border rounded px-3 py-2"
               value={access} onChange={e => setAccess(e.target.value as EventAccess)}>
-              <option value="PUBLIC">PUBLIC</option>
-              <option value="PRIVATE">PRIVATE</option>
+              <option value="PUBLIC">Публичный</option>
+              <option value="PRIVATE">По приглашению</option>
             </select>
           </L>
 
           <L label="Приём заявок">
             <select className="w-full border rounded px-3 py-2"
               value={admission} onChange={e => setAdmission(e.target.value as EventAdmission)}>
-              <option value="AUTO">AUTO</option>
-              <option value="MANUAL">MANUAL</option>
+              <option value="AUTO">Автоматически</option>
+              <option value="MANUAL">Ручной</option>
             </select>
           </L>
 
-          <L label="Лист ожидания">
-            <label className="inline-flex items-center gap-2 px-2 py-2 border rounded">
-              <input type="checkbox" checked={waitlistEnabled}
-                onChange={e => setWaitlistEnabled(e.target.checked)} />
-              <span>Включить</span>
-            </label>
-          </L>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <L label="Широта (lat)">
-            <input type="number" step="0.000001" className="w-full border rounded px-3 py-2"
-              value={locationLat ?? ""} onChange={e => {
-                const v = e.target.value;
-                setLocationLat(v === "" ? undefined : Number(v));
-              }} />
-          </L>
-          <L label="Долгота (lon)">
-            <input type="number" step="0.000001" className="w-full border rounded px-3 py-2"
-              value={locationLon ?? ""} onChange={e => {
-                const v = e.target.value;
-                setLocationLon(v === "" ? undefined : Number(v));
-              }} />
+          <L label="Уровни участников">
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="w-full border rounded px-3 py-2"
+                value={levelMin}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setLevelMin(v);
+                  setLevelMax((prev) => (prev < v ? v : prev));
+                }}
+              >
+                {Object.keys(LEVEL_LABEL).map((k) => {
+                  const n = Number(k);
+                  return (
+                    <option key={k} value={n}>
+                      от {LEVEL_LABEL[n]} ({n})
+                    </option>
+                  );
+                })}
+              </select>
+              <select
+                className="w-full border rounded px-3 py-2"
+                value={levelMax}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setLevelMax(v);
+                  setLevelMin((prev) => (prev > v ? v : prev));
+                }}
+              >
+                {Object.keys(LEVEL_LABEL).map((k) => {
+                  const n = Number(k);
+                  return (
+                    <option key={k} value={n}>
+                      до {LEVEL_LABEL[n]} ({n})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            {/*
+              Лист ожидания пока скрыт (решим позже, оставляем на бэке без изменений)
+            */}
           </L>
         </div>
       </form>

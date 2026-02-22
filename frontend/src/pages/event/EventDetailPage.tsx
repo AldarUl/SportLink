@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { getEvent, cancelEvent, launchEvent } from "@/entities/event/api";
+import { getEvent, cancelEvent, launchEvent, finishEvent } from "@/entities/event/api";
 import type { Event } from "@/entities/event/types";
 import { useEventStore } from "@/entities/event/store";
 import { useAuthStore } from "@/features/auth/store";

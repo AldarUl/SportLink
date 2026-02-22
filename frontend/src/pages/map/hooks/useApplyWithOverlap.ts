@@ -1,6 +1,8 @@
 import { useApplicationStore } from "@/entities/application/store";
 import { willOverlapWithAny } from "@/shared/schedule";
 import type { Event as AppEvent } from "@/entities/event/types";
+import { toast } from "@/shared/ui/toast";
+import { getApiErrorMessage } from "@/shared/lib/apiError";
 
 export function useApplyWithOverlap() {
   const { mine, apply: applyAction, withdrawByEvent, findByEventId, loadMine } = useApplicationStore();
@@ -13,13 +15,13 @@ export function useApplyWithOverlap() {
       const want = { start: ev.startsAt, durMin: ev.durationMin };
 
       if (willOverlapWithAny(want, active)) {
-        alert("Нельзя записаться: пересечение по времени с уже активной тренировкой.");
+        toast.error("Нельзя записаться: пересечение по времени с уже активной тренировкой.");
         return;
       }
       await applyAction(ev);
     } catch (e: any) {
       console.error(e);
-      alert(e?.response?.data?.message || "Не удалось подать заявку");
+      toast.error(getApiErrorMessage(e, "Не удалось подать заявку"));
     }
   };
 

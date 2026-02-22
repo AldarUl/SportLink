@@ -39,7 +39,8 @@ export async function myApplications(page = 0, size = 20): Promise<Page<Applicat
     totalElements: data?.totalElements ?? content.length,
     totalPages: data?.totalPages ?? 1,
     size: data?.size ?? content.length,
-    number: data?.number ?? data?.page ?? 0,
+    page: data?.number ?? data?.page ?? 0,
+    last: data?.last ?? true,
   };
 }
 
@@ -55,6 +56,7 @@ export async function applicationsByEvent(
     totalElements: data?.totalElements ?? content.length,
     totalPages: data?.totalPages ?? 1,
     size: data?.size ?? content.length,
-    number: data?.number ?? data?.page ?? 0,
+    page: data?.number ?? data?.page ?? 0,
+    last: data?.last ?? true,
   };
 }

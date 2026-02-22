@@ -29,8 +29,8 @@ const ADMISSION: Event["admission"][] = ["AUTO", "MANUAL"];
 
 export default function EventCreatePage() {
   const navigate = useNavigate();
-  const me = useAuthStore(s => s.user); // предполагаю, что у тебя где-то есть user в сторе
-  const organizerId = me?.userId ?? me?.id; // подстрой под свой стор
+  const me = useAuthStore((s) => s.user);
+  const organizerId = me?.id;
 
   const [sports, setSports] = useState<{code:string;name:string}[]>([]);
   const [saving, setSaving] = useState(false);

@@ -33,6 +33,9 @@ export function useViewportFetch(
   zoomRef: React.MutableRefObject<number>,
   getDiagKm: () => number
 ) {
+  // пока не используем эти параметры, но оставляем контракт (для будущих ограничений по зуму/диагонали)
+  void zoomRef;
+  void getDiagKm;
   const setEvents = useEventStore(s => s.setEvents);
   const seqRef = useRef(0);
   const tRef = useRef<number | null>(null);
