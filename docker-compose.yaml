@@ -1,0 +1,10 @@
+services:
+  frontend:
+    image: nginx:alpine
+    container_name: sportlink-mock
+    ports:
+      - "80:80"
+    volumes:
+      - ./index.html:/usr/share/nginx/html/index.html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
