@@ -1,15 +1,16 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: sportlink
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports: ["5432:5432"]
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U postgres -d sportlink"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -17,45 +18,57 @@ services:
 
   maildev:
     image: maildev/maildev:latest
-    ports: ["1080:1080", "1025:1025"]
+    ports:
+      - "1080:1080"
+      - "1025:1025"
     restart: unless-stopped
 
   app:
     build:
       context: ./backend/app
       dockerfile: Dockerfile
+    env_file:
+      - .env
     environment:
-      SPRING_PROFILES_ACTIVE: dev
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/sportlink
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: password
-      SECURITY_JWT_SECRET: change-me-very-long-random-secret-32b-min
-      SECURITY_JWT_EXPIRATIONMS: 86400000
-      # путь, который использует AvatarServiceImpl
-#      AVATARS_DIR: /data/avatars
-      NEXTCLOUD_BASE_URL: http://nextcloud
-      NEXTCLOUD_USER: sportlink
-      NEXTCLOUD_PASSWORD: Sportlink123!
-      NEXTCLOUD_AVATARS_ROOT: /remote.php/dav/files/sportlink/SportLink/avatars
-
-      APP_FILES_ROOT: /tmp/sportlink-files
-
-    ports: ["8080:8080"]
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SECURITY_JWT_SECRET: ${SECURITY_JWT_SECRET}
+      SECURITY_JWT_EXPIRATIONMS: ${SECURITY_JWT_EXPIRATIONMS}
+      NEXTCLOUD_BASE_URL: ${NEXTCLOUD_BASE_URL}
+      NEXTCLOUD_USER: ${NEXTCLOUD_USER}
+      NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD}
+      NEXTCLOUD_AVATARS_ROOT: ${NEXTCLOUD_AVATARS_ROOT}
+      APP_FILES_ROOT: ${APP_FILES_ROOT}
+      BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME}
+    ports:
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
-    # постоянное хранилище для аватаров
-#    volumes:
-#      - ./storage/avatars:/data/avatars
-      # если у тебя SELinux, используй так:
-      # - ./storage/avatars:/data/avatars:z
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - app
+    ports:
+      - "80:80"
     restart: unless-stopped
 
   nextcloud:
     image: nextcloud:latest
     restart: unless-stopped
     ports:
-      - "8081:80"             # Nextcloud будет доступен на http://localhost:8081
+      - "8081:80"
     volumes:
-      - ./storage/nextcloud:/var/www/html       # данные самого Nextcloud
-#      - ./storage/avatars:/mnt/avatars          # ТА ЖЕ папка с аватарками, что и у backend
+      - ./storage/nextcloud:/var/www/html
+
+volumes:
+  postgres_data:
