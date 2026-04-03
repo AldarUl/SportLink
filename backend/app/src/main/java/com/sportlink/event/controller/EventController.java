@@ -29,7 +29,7 @@ public class EventController {
 
     private UUID currentUserId(Authentication auth) {
         String email = auth.getName();
-        User u = userRepository.findByEmail(email).orElseThrow();
+        User u = userRepository.findByEmailIgnoreCase(email).orElseThrow();
         return u.getId();
     }
 

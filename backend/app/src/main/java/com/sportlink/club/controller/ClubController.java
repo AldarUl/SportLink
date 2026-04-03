@@ -22,7 +22,7 @@ public class ClubController {
 
     private UUID me(Authentication auth) {
         String email = auth.getName();
-        return userRepository.findByEmail(email).orElseThrow().getId();
+        return userRepository.findByEmailIgnoreCase(email).orElseThrow().getId();
     }
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Создать клуб")

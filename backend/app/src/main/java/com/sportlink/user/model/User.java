@@ -33,6 +33,10 @@ public class User {
     @Column(nullable = false, length = 16)
     private Role role;
 
+    /** Признак блокировки аккаунта администратором (ФТ администрирования). */
+    @Column(nullable = false)
+    private boolean blocked;
+
     @Column(name = "avatar_url", length = 512)
     private String avatarUrl;
 }

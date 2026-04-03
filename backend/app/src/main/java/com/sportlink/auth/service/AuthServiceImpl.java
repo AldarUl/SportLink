@@ -35,6 +35,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshRepo;
     private final JwtService jwt;
+    private final PasswordEncoder passwordEncoder;
 
     @Value("${security.jwt.refreshTtlDays:30}")
     long refreshTtlDays;
@@ -55,8 +56,16 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public LoginResponse login(LoginRequest req, HttpServletRequest httpReq, HttpServletResponse httpResp) {
-        // 1) Аутентификация пользователя (и проверка пароля, если ты её делаешь здесь)
-        User user = userRepository.findByEmail(req.email()).orElseThrow();
+        // 1) Проверяем, что пользователь существует, пароль верный и аккаунт не заблокирован
+        User user = userRepository.findByEmailIgnoreCase(req.email())
+                .orElseThrow(() -> new UnauthorizedException("BAD_CREDENTIALS"));
+
+        if (user.isBlocked()) {
+            throw new UnauthorizedException("ACCOUNT_BLOCKED");
+        }
+        if (!passwordEncoder.matches(req.password(), user.getPasswordHash())) {
+            throw new UnauthorizedException("BAD_CREDENTIALS");
+        }
 
         // 2) Access JWT: subject = email (важно для твоего JwtAuthFilter)
         String access = jwt.createAccessJwt(
@@ -144,6 +153,11 @@ public class AuthServiceImpl implements AuthService {
 // стало
         User user = userRepository.findById(current.getUserId())
                 .orElseThrow(() -> new UnauthorizedException("User not found"));
+        if (user.isBlocked()) {
+            // На всякий случай чистим семейство и не выдаём новые токены.
+            refreshRepo.deleteByFamilyId(current.getFamilyId());
+            throw new UnauthorizedException("ACCOUNT_BLOCKED");
+        }
         String access = jwt.createAccessJwt(user.getEmail(), Map.of(
                 "uid", user.getId().toString(),
                 "role", user.getRole().name()

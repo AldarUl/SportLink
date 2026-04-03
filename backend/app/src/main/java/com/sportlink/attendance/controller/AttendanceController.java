@@ -23,7 +23,7 @@ public class AttendanceController {
     private final UserRepository userRepository;
 
     private UUID me(Authentication auth) {
-        User u = userRepository.findByEmail(auth.getName()).orElseThrow();
+        User u = userRepository.findByEmailIgnoreCase(auth.getName()).orElseThrow();
         return u.getId();
     }
 

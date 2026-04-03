@@ -1,7 +1,7 @@
 // src/features/auth/store.ts
 import { create } from "zustand";
 
-type User = { id: string; email: string; displayName?: string };
+type User = { id: string; email: string; displayName?: string; role?: string; blocked?: boolean };
 
 type Tokens = {
   accessToken: string | null;

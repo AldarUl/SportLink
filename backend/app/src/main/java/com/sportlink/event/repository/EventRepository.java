@@ -43,6 +43,10 @@ public interface EventRepository extends JpaRepository<Event, UUID>, JpaSpecific
 
     List<Event> findByOrganizerIdAndStatusNotAndStartsAtAfter(UUID organizerId, EventStatus status, OffsetDateTime after);
 
+    long countByOrganizerIdAndStatusInAndStartsAtAfter(UUID organizerId, java.util.Collection<EventStatus> statuses, OffsetDateTime after);
+
+    List<Event> findByOrganizerIdAndStatusInAndStartsAtAfter(UUID organizerId, java.util.Collection<EventStatus> statuses, OffsetDateTime after);
+
     Page<Event> findByStartsAtBefore(OffsetDateTime cutoff, Pageable pageable);
 
     Page<Event> findByOrganizerId(UUID organizerId, Pageable pageable);

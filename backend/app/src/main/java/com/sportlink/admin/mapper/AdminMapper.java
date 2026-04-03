@@ -9,7 +9,14 @@ public class AdminMapper {
     private AdminMapper() {}
 
     public static AdminUser toAdminUser(User u) {
-        return new AdminUser(u.getId(), u.getEmail(), u.getDisplayName(), u.getCreatedAt());
+        return new AdminUser(
+                u.getId(),
+                u.getEmail(),
+                u.getDisplayName(),
+                u.getRole().name(),
+                u.isBlocked(),
+                u.getCreatedAt()
+        );
     }
 
     public static AdminEvent toAdminEvent(Event e) {

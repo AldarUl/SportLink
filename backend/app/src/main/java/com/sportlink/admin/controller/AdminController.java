@@ -40,6 +40,16 @@ public class AdminController {
         return adminService.listUsers(pageable);
     }
 
+    @io.swagger.v3.oas.annotations.Operation(summary = "Заблокировать пользователя")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/user/{id}/block")
+    public void blockUser(@PathVariable UUID id) { adminService.blockUser(id); }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Разблокировать пользователя")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/user/{id}/unblock")
+    public void unblockUser(@PathVariable UUID id) { adminService.unblockUser(id); }
+
     @io.swagger.v3.oas.annotations.Operation(summary = "События (фильтр по статусу, пагинация)")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @GetMapping("/event")
@@ -48,6 +58,16 @@ public class AdminController {
                                            @RequestParam(defaultValue = "20") int size) {
         return adminService.listEvents(status, PageRequest.of(page, size));
     }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Снять с публикации (скрыть) событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/event/{id}/hide")
+    public void hide(@PathVariable UUID id) { adminService.hideEvent(id); }
+
+    @io.swagger.v3.oas.annotations.Operation(summary = "Удалить событие")
+    @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/event/{id}")
+    public void delete(@PathVariable UUID id) { adminService.deleteEvent(id); }
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Отменить событие")
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")

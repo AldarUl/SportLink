@@ -29,6 +29,12 @@ import static com.sportlink.event.service.EventSpecifications.*;
 public class EventServiceImpl implements EventService {
     private static final int MAX_ACTIVE_ORG_EVENTS = 3; // лимит событий
 
+    // активные события организатора, влияющие на лимит и пересечения по времени
+    private static final java.util.List<EventStatus> ORG_ACTIVE_STATUSES = java.util.List.of(
+            EventStatus.PUBLISHED,
+            EventStatus.STARTED
+    );
+
     private final EventRepository eventRepository;
     private final com.sportlink.club.repository.ClubMemberRepository clubMemberRepository;
     private final ApplicationRepository applicationRepository;
@@ -45,8 +51,8 @@ public class EventServiceImpl implements EventService {
     }
 
     private void ensureOrganizerLimit(UUID organizerId) {
-        long active = eventRepository.countByOrganizerIdAndStatusNotAndStartsAtAfter(
-                organizerId, EventStatus.CANCELLED, OffsetDateTime.now()
+        long active = eventRepository.countByOrganizerIdAndStatusInAndStartsAtAfter(
+                organizerId, ORG_ACTIVE_STATUSES, OffsetDateTime.now()
         );
         if (active >= MAX_ACTIVE_ORG_EVENTS) {
             throw new IllegalStateException("ORGANIZER_LIMIT_EXCEEDED: maximum " + MAX_ACTIVE_ORG_EVENTS + " future events");
@@ -54,8 +60,8 @@ public class EventServiceImpl implements EventService {
     }
 
     private void ensureNoOverlapOnCreate(UUID organizerId, OffsetDateTime start, Integer durMin) {
-        var future = eventRepository.findByOrganizerIdAndStatusNotAndStartsAtAfter(
-                organizerId, EventStatus.CANCELLED, OffsetDateTime.now()
+        var future = eventRepository.findByOrganizerIdAndStatusInAndStartsAtAfter(
+                organizerId, ORG_ACTIVE_STATUSES, OffsetDateTime.now()
         );
         for (var ex : future) {
             if (overlaps(start, durMin, ex.getStartsAt(), ex.getDurationMin()))
@@ -65,8 +71,8 @@ public class EventServiceImpl implements EventService {
 
     private void ensureNoOverlapOnUpdate(UUID organizerId, UUID updatingId,
                                          OffsetDateTime start, Integer durMin) {
-        var future = eventRepository.findByOrganizerIdAndStatusNotAndStartsAtAfter(
-                organizerId, EventStatus.CANCELLED, OffsetDateTime.now()
+        var future = eventRepository.findByOrganizerIdAndStatusInAndStartsAtAfter(
+                organizerId, ORG_ACTIVE_STATUSES, OffsetDateTime.now()
         );
         for (var ex : future) {
             if (ex.getId().equals(updatingId)) continue;
@@ -175,6 +181,10 @@ public class EventServiceImpl implements EventService {
                             Double centerLat, Double centerLon,
                             int page, int size) {
 
+        // Публичная выдача: показываем только опубликованные и текущие (STARTED).
+        // Скрытые (DRAFT), отменённые и завершённые не должны быть в ленте/на карте.
+        var publicStatuses = java.util.List.of(EventStatus.PUBLISHED, EventStatus.STARTED);
+
         Specification<Event> spec = Specification.where(kind(kind))
                 .and(sport(sport))
                 .and(access(access))
@@ -182,6 +192,7 @@ public class EventServiceImpl implements EventService {
                 .and(startsFrom(from))
                 .and(startsTo(to))
                 .and(club(clubId))
+                .and(statusIn(publicStatuses))
                 .and(bbox(minLat, minLon, maxLat, maxLon))
                 .and(orderByDistanceThenStart(centerLat, centerLon)); // задаст orderBy, если передан центр
 

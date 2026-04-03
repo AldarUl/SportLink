@@ -1,8 +1,7 @@
 // src/pages/RegisterPage.tsx
 import { useState, type FormEvent } from "react";
-import { register, login, fetchMe } from "@/features/auth/api"; // ← ДОБАВИЛИ login и fetchMe
+import { register, login, fetchMe } from "@/features/auth/api";
 import { Link, useNavigate } from "react-router-dom";
-
 
 export default function RegisterPage() {
   const nav = useNavigate();
@@ -25,15 +24,13 @@ export default function RegisterPage() {
       await login(email.trim(), password);
       await fetchMe();
       nav("/map", { replace: true });
-
     } catch (e: any) {
-      // бэкенд может прислать message или массив errors
-        console.error("Registration flow failed:", e); // ← видно будет ReferenceError/TypeError
+      console.error("Registration flow failed:", e);
       const msg =
         e?.response?.data?.message ||
         (Array.isArray(e?.response?.data?.errors)
           ? e.response.data.errors.join(", ")
-          : "Registration failed");
+          : "Не удалось зарегистрироваться");
       setErr(msg);
     } finally {
       setLoading(false);
@@ -43,13 +40,13 @@ export default function RegisterPage() {
   return (
     <div className="flex h-full items-center justify-center">
       <form onSubmit={onSubmit} className="w-full max-w-sm space-y-3 rounded-xl border p-6">
-        <h1 className="text-xl font-semibold">Create account</h1>
+        <h1 className="text-xl font-semibold">Регистрация</h1>
 
         {err && <div className="rounded bg-red-100 px-3 py-2 text-sm text-red-800">{err}</div>}
 
         <input
           className="w-full rounded border px-3 py-2"
-          placeholder="Name"
+          placeholder="Имя"
           autoComplete="name"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
@@ -59,7 +56,7 @@ export default function RegisterPage() {
 
         <input
           className="w-full rounded border px-3 py-2"
-          placeholder="Email"
+          placeholder="E-mail"
           type="email"
           autoComplete="email"
           value={email}
@@ -69,7 +66,7 @@ export default function RegisterPage() {
 
         <input
           className="w-full rounded border px-3 py-2"
-          placeholder="Password"
+          placeholder="Пароль"
           type="password"
           autoComplete="new-password"
           value={password}
@@ -81,11 +78,12 @@ export default function RegisterPage() {
           className="w-full rounded bg-black px-3 py-2 text-white disabled:opacity-60"
           disabled={loading}
         >
-          {loading ? "Registering…" : "Register"}
+          {loading ? "Регистрируем..." : "Зарегистрироваться"}
         </button>
 
         <div className="text-sm text-gray-600">
-          Have an account? <Link className="text-blue-600" to="/auth/login">Sign in</Link>
+          Уже есть аккаунт?{" "}
+          <Link className="text-blue-600" to="/auth/login">Войти</Link>
         </div>
       </form>
     </div>

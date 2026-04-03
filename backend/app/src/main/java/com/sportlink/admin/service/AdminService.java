@@ -12,6 +12,16 @@ public interface AdminService {
 
     PageResponse<AdminEvent> listEvents(EventStatus status, Pageable pageable);
 
+    void blockUser(java.util.UUID userId);
+
+    void unblockUser(java.util.UUID userId);
+
+    /** Снять с публикации (скрыть) событие/тренировку (переводим в DRAFT). */
+    void hideEvent(java.util.UUID eventId);
+
+    /** Удалить событие/тренировку (модерация). */
+    void deleteEvent(java.util.UUID eventId);
+
     void cancelEvent(java.util.UUID eventId);
 
     void publishEvent(java.util.UUID eventId);

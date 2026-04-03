@@ -26,7 +26,7 @@ public class AuthController {
     private final UserRepository userRepository;
 
     private UUID meId(Authentication auth) {
-        return userRepository.findByEmail(auth.getName()).orElseThrow().getId();
+        return userRepository.findByEmailIgnoreCase(auth.getName()).orElseThrow().getId();
     }
 
     @io.swagger.v3.oas.annotations.Operation(summary = "Логин (JWT + refresh в HttpOnly cookie)")
@@ -53,7 +53,7 @@ public class AuthController {
     @io.swagger.v3.oas.annotations.Operation(summary = "Текущий пользователь")
     @GetMapping("/me")
     public MeResponse me(Authentication auth) {
-        User u = userRepository.findByEmail(auth.getName()).orElseThrow();
-        return new MeResponse(u.getId(), u.getEmail(), u.getDisplayName()); // <-- без toString()
+        User u = userRepository.findByEmailIgnoreCase(auth.getName()).orElseThrow();
+        return new MeResponse(u.getId(), u.getEmail(), u.getDisplayName(), u.getRole().name(), u.isBlocked());
     }
 }

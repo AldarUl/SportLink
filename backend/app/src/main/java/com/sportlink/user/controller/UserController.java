@@ -49,7 +49,7 @@ public class UserController {
     public UserResponse updateMe(@RequestBody @Valid UserUpdateRequest req, Authentication auth) {
         // берём текущего пользователя из токена (subject=email)
         String email = auth.getName();
-        User me = userRepository.findByEmail(email).orElseThrow();
+        User me = userRepository.findByEmailIgnoreCase(email).orElseThrow();
         return userService.updateMe(me.getId(), req);
     }
 
@@ -64,7 +64,7 @@ public class UserController {
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @PostMapping(value = "/me/avatar", consumes = "multipart/form-data")
     public UserResponse uploadAvatar(@RequestPart("file") MultipartFile file, Authentication auth) throws Exception {
-        UUID meId = userRepository.findByEmail(auth.getName()).orElseThrow().getId();
+        UUID meId = userRepository.findByEmailIgnoreCase(auth.getName()).orElseThrow().getId();
         var u = userRepository.findById(meId).orElseThrow();
 
         avatarService.deleteAll(meId);
@@ -79,7 +79,7 @@ public class UserController {
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
     @DeleteMapping("/me/avatar")
     public void deleteAvatar(Authentication auth) throws Exception {
-        UUID meId = userRepository.findByEmail(auth.getName()).orElseThrow().getId();
+        UUID meId = userRepository.findByEmailIgnoreCase(auth.getName()).orElseThrow().getId();
         var u = userRepository.findById(meId).orElseThrow();
         avatarService.deleteAll(meId);
         u.setAvatarUrl(null);

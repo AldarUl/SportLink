@@ -5,6 +5,7 @@ import { useAuthStore } from "@/features/auth/store";
 import { fetchMe, tryRefresh, logout } from "@/features/auth/api"; // сгруппировал импорты
 import { useApplicationStore } from "@/entities/application/store";
 import ProtectedRoute from "@/shared/ProtectedRoute";
+import AdminRoute from "@/shared/AdminRoute";
 import MapPage from "@/pages/map/MapPage";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
@@ -13,6 +14,7 @@ import EventDetailPage from "@/pages/event/EventDetailPage";
 import EventEditPage from "@/pages/event/EventEditPage";
 import SkillsGate from "@/features/skills/SkillsGate";
 import ProfilePage from "@/pages/profile/ProfilePage";
+import AdminPage from "@/pages/admin/AdminPage";
 import ToastHost from "@/shared/ui/toast/ToastHost";
 
 
@@ -45,14 +47,14 @@ function shouldRefreshSoon(token: string | null | undefined, withinMs = 90_000) 
 
 function Nav() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const user = useAuthStore((s) => s.user);
   const isAuthed = Boolean(accessToken);
+  const isAdmin = user?.role === "ADMIN";
 
   return (
     <div className="grid grid-cols-3 items-center border-b px-4 py-2">
-      {/* left spacer */}
       <div />
 
-      {/* centered logo */}
       <Link
         to="/map"
         className="sportlink-wordmark justify-self-center text-2xl font-extrabold tracking-wide"
@@ -61,10 +63,14 @@ function Nav() {
         SportLink
       </Link>
 
-      {/* right actions */}
       <div className="justify-self-end flex items-center gap-2">
         {isAuthed ? (
           <>
+            {isAdmin && (
+              <Link to="/admin" className="rounded-full border px-3 py-1">
+                Админ
+              </Link>
+            )}
             <Link to="/profile" className="rounded-full border px-3 py-1">
               Мой профиль
             </Link>
@@ -74,9 +80,9 @@ function Nav() {
           </>
         ) : (
           <>
-            <Link to="/auth/login">Login</Link>
+            <Link to="/auth/login">Войти</Link>
             <Link to="/auth/register" className="rounded bg-black px-3 py-1 text-white">
-              Register
+              Регистрация
             </Link>
           </>
         )}
@@ -167,6 +173,11 @@ export default function App() {
             <Route path="/event/new" element={<EventCreatePage />} />
             <Route path="/event/:id/edit" element={<EventEditPage />} />
             <Route path="/profile" element={<ProfilePage />} />          {/* мой профиль */}
+
+            {/* Админка */}
+            <Route element={<AdminRoute />}>
+              <Route path="/admin" element={<AdminPage />} />
+            </Route>
           </Route>
           <Route path="/profile/:id" element={<ProfilePage />} />        {/* публичный профиль */}
           <Route path="*" element={<Navigate to="/map" replace />} />

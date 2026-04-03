@@ -77,6 +77,6 @@ public class UserSkillController {
     }
 
     private UUID currentUserId(Authentication auth) {
-        return userRepository.findByEmail(auth.getName()).orElseThrow().getId();
+        return userRepository.findByEmailIgnoreCase(auth.getName()).orElseThrow().getId();
     }
 }

@@ -25,11 +25,11 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public UserResponse create(UserCreateRequest req) {
-        userRepository.findByEmail(req.email()).ifPresent(u -> {
+        if (userRepository.existsByEmailIgnoreCase(req.email())) {
             throw new IllegalArgumentException("Email already used");
-        });
+        }
         var user = User.builder()
-                .email(req.email())
+                .email(req.email().trim())
                 .displayName(req.displayName())
                 .passwordHash(passwordEncoder.encode(req.password()))
                 .role(Role.USER)

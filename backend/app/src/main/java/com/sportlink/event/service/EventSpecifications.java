@@ -5,6 +5,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.Collection;
 
 public final class EventSpecifications {
     private EventSpecifications(){}
@@ -36,6 +37,12 @@ public final class EventSpecifications {
 
     public static Specification<Event> club(UUID clubId) {
         return clubId == null ? null : (root, q, cb) -> cb.equal(root.get("clubId"), clubId);
+    }
+
+    /** Ограничение по статусам (например, для публичной выдачи). */
+    public static Specification<Event> statusIn(Collection<EventStatus> statuses) {
+        if (statuses == null || statuses.isEmpty()) return null;
+        return (root, q, cb) -> root.get("status").in(statuses);
     }
 
     /** Фильтр по текущему окну карты */

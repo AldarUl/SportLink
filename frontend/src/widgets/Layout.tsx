@@ -22,14 +22,14 @@ export default function Layout() {
                 onClick={() => logout()}
                 className="rounded bg-black px-3 py-1 text-white"
               >
-                Logout
+                Выйти
               </button>
             </>
           ) : (
             <>
-              <Link to="/auth/login" className="px-3 py-1">Login</Link>
+              <Link to="/auth/login" className="px-3 py-1">Войти</Link>
               <Link to="/auth/register" className="rounded bg-black px-3 py-1 text-white">
-                Register
+                Регистрация
               </Link>
             </>
           )}

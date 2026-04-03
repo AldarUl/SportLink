@@ -1,0 +1,24 @@
+---- V3__admin_blocking_and_event_constraints.sql
+---- 1) Добавляем возможность блокировки пользователей (минимальные ФТ по администрированию)
+---- 2) Приводим CHECK-ограничения таблицы event к enum'ам приложения
+--
+---- === app_user: блокировка ===
+--ALTER TABLE app_user
+--  ADD COLUMN IF NOT EXISTS blocked BOOLEAN NOT NULL DEFAULT FALSE;
+--
+--CREATE INDEX IF NOT EXISTS ix_app_user_blocked ON app_user(blocked);
+--
+--
+---- === event: CHECK-ограничения должны соответствовать enum'ам приложения ===
+--
+---- status: DRAFT | PUBLISHED | STARTED | FINISHED | CANCELLED
+--ALTER TABLE event DROP CONSTRAINT IF EXISTS chk_event_status;
+--ALTER TABLE event
+--  ADD CONSTRAINT chk_event_status
+--  CHECK (status IN ('DRAFT','PUBLISHED','STARTED','FINISHED','CANCELLED'));
+--
+---- access: PUBLIC | PRIVATE | CLUB_ONLY (CLUB_ONLY оставляем для обратной совместимости)
+--ALTER TABLE event DROP CONSTRAINT IF EXISTS chk_event_access;
+--ALTER TABLE event
+--  ADD CONSTRAINT chk_event_access
+--  CHECK (access IN ('PUBLIC','PRIVATE','CLUB_ONLY'));

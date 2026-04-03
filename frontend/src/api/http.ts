@@ -127,9 +127,10 @@ http.interceptors.response.use(
       original?.url?.includes("/auth/refresh") ||
       original?.url?.includes("/auth/me");
 
-    const shouldTryRefresh =
-      (status === 401 || status === 403) && !isAuthCall && !original?._retry;
+    const isAdminCall = original?.url?.includes("/admin/");
 
+    const shouldTryRefresh =
+      status === 401 && !isAuthCall && !original?._retry;
     if (shouldTryRefresh) {
       original._retry = true;
       try {
@@ -143,10 +144,7 @@ http.interceptors.response.use(
       }
     }
 
-    // Если уже пытались refresh и снова прилетело 401/403 — считаем, что сессия невалидна.
-    // В нашем приложении почти все приватные эндпоинты должны быть доступны обычному пользователю,
-    // поэтому 403 после refresh обычно означает «токен не принят/не та роль».
-    if ((status === 401 || status === 403) && !isAuthCall && original?._retry) {
+    if (status === 401 && !isAuthCall && original?._retry) {
       logoutAndRedirect();
       return new Promise(() => {});
     }

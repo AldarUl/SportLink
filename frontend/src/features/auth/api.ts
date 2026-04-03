@@ -27,7 +27,13 @@ export async function register(payload: { displayName: string; email: string; pa
 
 export async function fetchMe() {
   const { data } = await http.get("/auth/me");
-  const u = { id: data.userId, email: data.email, displayName: data.displayName };
+  const u = {
+    id: data.userId,
+    email: data.email,
+    displayName: data.displayName,
+    role: data.role,
+    blocked: data.blocked,
+  };
   useAuthStore.getState().setUser(u);
   return u;
 }
