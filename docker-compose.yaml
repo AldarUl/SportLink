@@ -31,20 +31,26 @@ services:
       - .env
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+
       SECURITY_JWT_SECRET: ${SECURITY_JWT_SECRET}
       SECURITY_JWT_EXPIRATIONMS: ${SECURITY_JWT_EXPIRATIONMS}
+
       NEXTCLOUD_BASE_URL: ${NEXTCLOUD_BASE_URL}
       NEXTCLOUD_USER: ${NEXTCLOUD_USER}
       NEXTCLOUD_PASSWORD: ${NEXTCLOUD_PASSWORD}
       NEXTCLOUD_AVATARS_ROOT: ${NEXTCLOUD_AVATARS_ROOT}
+
       APP_FILES_ROOT: ${APP_FILES_ROOT}
+
       BOOTSTRAP_ADMIN_ENABLED: ${BOOTSTRAP_ADMIN_ENABLED}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME}
+
     ports:
       - "8080:8080"
     depends_on:
@@ -61,14 +67,6 @@ services:
     ports:
       - "80:80"
     restart: unless-stopped
-
-  nextcloud:
-    image: nextcloud:latest
-    restart: unless-stopped
-    ports:
-      - "8081:80"
-    volumes:
-      - ./storage/nextcloud:/var/www/html
 
 volumes:
   postgres_data:
