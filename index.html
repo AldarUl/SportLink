@@ -3,60 +3,706 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SportLink</title>
+  <title>SportLink — скоро запуск</title>
   <style>
+    :root {
+      --bg-1: #07111f;
+      --bg-2: #0f1d33;
+      --bg-3: #12263f;
+      --card: rgba(255, 255, 255, 0.08);
+      --card-border: rgba(255, 255, 255, 0.14);
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --soft: #94a3b8;
+      --accent: #22c55e;
+      --accent-2: #38bdf8;
+      --shadow: 0 25px 70px rgba(0, 0, 0, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
+      font-family: Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(34, 197, 94, 0.15), transparent 28%),
+        linear-gradient(135deg, var(--bg-1), var(--bg-2) 50%, var(--bg-3));
+      overflow-x: hidden;
+    }
+
+    .background-blur {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .background-blur::before,
+    .background-blur::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(70px);
+      opacity: 0.4;
+    }
+
+    .background-blur::before {
+      width: 320px;
+      height: 320px;
+      background: #22c55e;
+      top: 5%;
+      left: -80px;
+    }
+
+    .background-blur::after {
+      width: 360px;
+      height: 360px;
+      background: #38bdf8;
+      right: -120px;
+      bottom: 8%;
+    }
+
+    .page {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 56px;
+    }
+
+    .topbar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #0f172a, #1e293b);
-      font-family: Arial, sans-serif;
-      color: white;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 26px;
+      padding: 14px 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 18px;
+      backdrop-filter: blur(10px);
     }
 
-    .card {
-      width: min(520px, 90vw);
-      background: rgba(255, 255, 255, 0.06);
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 20px;
+      letter-spacing: 0.3px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(56, 189, 248, 0.25));
       border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 20px;
-      padding: 40px 32px;
-      text-align: center;
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-      backdrop-filter: blur(8px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
     }
 
-    h1 {
-      margin: 0 0 12px;
-      font-size: 40px;
-      letter-spacing: 0.5px;
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      color: #bbf7d0;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.24);
+      white-space: nowrap;
     }
 
-    p {
-      margin: 0;
-      font-size: 18px;
-      line-height: 1.5;
-      color: #cbd5e1;
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(34, 197, 94, 0.7);
     }
 
-    .badge {
+    .hero {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .hero-main,
+    .hero-side,
+    .info-card,
+    .mini-card,
+    .bottom-card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      padding: 42px;
+    }
+
+    .hero-label {
       display: inline-block;
       margin-bottom: 18px;
       padding: 8px 14px;
       border-radius: 999px;
-      background: rgba(34, 197, 94, 0.15);
-      color: #86efac;
+      background: rgba(56, 189, 248, 0.12);
+      color: #bae6fd;
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: clamp(38px, 5vw, 62px);
+      line-height: 1.02;
+      letter-spacing: -1.4px;
+    }
+
+    .hero-text {
+      margin: 0;
+      max-width: 720px;
+      font-size: 18px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .highlight {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 22px;
+      border-radius: 16px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+
+    .btn-primary {
+      color: #06131f;
+      background: linear-gradient(135deg, #22c55e, #38bdf8);
+      box-shadow: 0 12px 24px rgba(34, 197, 94, 0.18);
+    }
+
+    .btn-secondary {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .hero-side {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .mock-screen {
+      position: relative;
+      min-height: 320px;
+      padding: 20px;
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.03)),
+        radial-gradient(circle at 70% 20%, rgba(56, 189, 248, 0.18), transparent 25%),
+        radial-gradient(circle at 25% 75%, rgba(34, 197, 94, 0.16), transparent 22%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+
+    .screen-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .screen-dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .screen-dots span {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .screen-badge {
+      font-size: 12px;
+      color: #d1fae5;
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.18);
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    .map-box {
+      position: relative;
+      height: 210px;
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02)),
+        repeating-linear-gradient(
+          45deg,
+          rgba(255,255,255,0.03) 0,
+          rgba(255,255,255,0.03) 12px,
+          transparent 12px,
+          transparent 24px
+        );
+      border: 1px solid rgba(255,255,255,0.08);
+      overflow: hidden;
+    }
+
+    .map-line {
+      position: absolute;
+      inset: auto;
+      background: rgba(255,255,255,0.05);
+    }
+
+    .map-line.h1 { top: 34px; left: -10px; width: 120%; height: 2px; }
+    .map-line.h2 { top: 100px; left: -10px; width: 120%; height: 2px; }
+    .map-line.h3 { top: 166px; left: -10px; width: 120%; height: 2px; }
+    .map-line.v1 { left: 52px; top: -10px; width: 2px; height: 120%; }
+    .map-line.v2 { left: 160px; top: -10px; width: 2px; height: 120%; }
+    .map-line.v3 { right: 70px; top: -10px; width: 2px; height: 120%; }
+
+    .pin,
+    .user-pin {
+      position: absolute;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      font-weight: 700;
+      color: white;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+    }
+
+    .pin {
+      width: 20px;
+      height: 20px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      border: 2px solid rgba(255,255,255,0.7);
+    }
+
+    .user-pin {
+      width: 14px;
+      height: 14px;
+      background: linear-gradient(135deg, #38bdf8, #0284c7);
+      border: 2px solid rgba(255,255,255,0.7);
+    }
+
+    .pin.p1 { top: 48px; left: 70px; }
+    .pin.p2 { top: 130px; left: 188px; }
+    .pin.p3 { top: 68px; right: 72px; }
+    .user-pin.u1 { top: 94px; left: 118px; }
+    .user-pin.u2 { top: 148px; right: 118px; }
+    .user-pin.u3 { top: 44px; right: 150px; }
+
+    .floating-card {
+      position: absolute;
+      right: 16px;
+      bottom: 16px;
+      width: 160px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(8, 15, 27, 0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .floating-card strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+    }
+
+    .floating-card span {
+      display: block;
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .coming-note {
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+      margin-top: 24px;
+    }
+
+    .info-card {
+      padding: 26px 24px;
+    }
+
+    .info-card h3 {
+      margin: 0 0 10px;
+      font-size: 22px;
+    }
+
+    .info-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    .section-title {
+      margin: 52px 0 18px;
+      font-size: 30px;
+      letter-spacing: -0.6px;
+    }
+
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+    }
+
+    .mini-card {
+      padding: 22px 20px;
+    }
+
+    .mini-card .icon {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      margin-bottom: 14px;
+      font-size: 22px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .mini-card h4 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+
+    .mini-card p {
+      margin: 0;
+      color: var(--soft);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .bottom-card {
+      margin-top: 24px;
+      padding: 28px;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .bottom-card h2 {
+      margin: 0 0 12px;
+      font-size: 30px;
+      letter-spacing: -0.7px;
+    }
+
+    .bottom-card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 16px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+
+    .stat {
+      padding: 18px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+
+    .stat span {
+      color: var(--soft);
       font-size: 14px;
-      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    footer {
+      margin-top: 24px;
+      text-align: center;
+      color: var(--soft);
+      font-size: 14px;
+      padding-bottom: 10px;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .bottom-card,
+      .grid,
+      .mini-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-main,
+      .hero-side,
+      .bottom-card {
+        padding: 26px;
+      }
+
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .page {
+        width: min(100% - 20px, 1180px);
+        padding-top: 20px;
+      }
+
+      .hero-main,
+      .hero-side,
+      .info-card,
+      .mini-card,
+      .bottom-card {
+        border-radius: 22px;
+      }
+
+      h1 {
+        font-size: 36px;
+      }
+
+      .hero-text,
+      .info-card p,
+      .bottom-card p {
+        font-size: 15px;
+      }
+
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="badge">SportLink</div>
-    <h1>В разработке</h1>
-    <p>Приложение скоро будет доступно.</p>
+  <div class="background-blur"></div>
+
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div>SportLink</div>
+      </div>
+      <div class="status-pill">
+        <span class="dot"></span>
+        Платформа находится в активной разработке
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-main">
+        <div class="hero-label">Новый цифровой формат спортивных встреч</div>
+        <h1>Находите тренировки, людей и спортивные события в одном месте</h1>
+        <p class="hero-text">
+          <span class="highlight">SportLink</span> — это веб-приложение, которое помогает проще находить спортивные активности,
+          записываться на тренировки и объединять людей вокруг спорта.
+          Мы создаём удобную платформу для тех, кто хочет быстро найти подходящее событие,
+          и для тех, кто хочет удобно организовывать свои активности.
+        </p>
+
+        <div class="hero-actions">
+          <a href="#about" class="btn btn-primary">Узнать больше</a>
+          <a href="#future" class="btn btn-secondary">Скоро запуск</a>
+        </div>
+      </div>
+
+      <div class="hero-side">
+        <div class="mock-screen">
+          <div class="screen-top">
+            <div class="screen-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <div class="screen-badge">Preview</div>
+          </div>
+
+          <div class="map-box">
+            <div class="map-line h1"></div>
+            <div class="map-line h2"></div>
+            <div class="map-line h3"></div>
+            <div class="map-line v1"></div>
+            <div class="map-line v2"></div>
+            <div class="map-line v3"></div>
+
+            <div class="pin p1"></div>
+            <div class="pin p2"></div>
+            <div class="pin p3"></div>
+
+            <div class="user-pin u1"></div>
+            <div class="user-pin u2"></div>
+            <div class="user-pin u3"></div>
+
+            <div class="floating-card">
+              <strong>Ближайшая тренировка</strong>
+              <span>Удобный поиск, понятная запись и современный формат спортивных встреч.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="coming-note" id="future">
+          Сейчас мы дорабатываем продукт, интерфейс и пользовательский опыт.
+          Полноценный запуск будет доступен позже.
+        </div>
+      </div>
+    </section>
+
+    <section class="grid" id="about">
+      <div class="info-card">
+        <h3>Для пользователей</h3>
+        <p>
+          Удобный способ находить тренировки и спортивные активности без долгого поиска
+          в разных чатах и соцсетях. Всё в одном понятном интерфейсе.
+        </p>
+      </div>
+
+      <div class="info-card">
+        <h3>Для организаторов</h3>
+        <p>
+          Платформа помогает удобнее представлять активности, собирать участников
+          и делать спортивные встречи более организованными и прозрачными.
+        </p>
+      </div>
+
+      <div class="info-card">
+        <h3>Для инвесторов</h3>
+        <p>
+          SportLink работает на стыке спорта, локальных сообществ и цифровых сервисов.
+          Это понятная идея с потенциалом масштабирования и роста аудитории.
+        </p>
+      </div>
+    </section>
+
+    <h2 class="section-title">Почему это может быть интересно</h2>
+
+    <section class="mini-grid">
+      <div class="mini-card">
+        <div class="icon">📍</div>
+        <h4>Удобный поиск</h4>
+        <p>Пользователи быстрее находят подходящие активности рядом с собой.</p>
+      </div>
+
+      <div class="mini-card">
+        <div class="icon">🤝</div>
+        <h4>Сообщество</h4>
+        <p>Приложение помогает людям легче знакомиться через общий интерес к спорту.</p>
+      </div>
+
+      <div class="mini-card">
+        <div class="icon">⚡</div>
+        <h4>Простота</h4>
+        <p>Основной акцент — понятный интерфейс без перегруженности и лишних шагов.</p>
+      </div>
+
+      <div class="mini-card">
+        <div class="icon">📈</div>
+        <h4>Потенциал роста</h4>
+        <p>Продукт можно развивать как в сторону B2C-аудитории, так и для организаторов.</p>
+      </div>
+    </section>
+
+    <section class="bottom-card">
+      <div>
+        <h2>SportLink — платформа, которая делает спортивные встречи ближе и понятнее</h2>
+        <p>
+          Мы не раскрываем здесь все детали продукта, потому что проект ещё находится в разработке.
+          Но уже сейчас ясно главное: SportLink создаётся как современное, удобное и визуально понятное решение
+          для людей, которые хотят быть активнее, а также для тех, кто хочет создавать и развивать спортивные активности.
+        </p>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <strong>UI</strong>
+          <span>Фокус на чистом, современном и простом интерфейсе</span>
+        </div>
+        <div class="stat">
+          <strong>MVP</strong>
+          <span>Проект движется к первой рабочей версии продукта</span>
+        </div>
+        <div class="stat">
+          <strong>B2C</strong>
+          <span>Ценность для обычных пользователей и локальных сообществ</span>
+        </div>
+        <div class="stat">
+          <strong>Growth</strong>
+          <span>Основа для дальнейшего масштабирования и развития</span>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      © SportLink — страница предварительного просмотра
+    </footer>
   </div>
 </body>
 </html>
